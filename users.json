@@ -2,21 +2,21 @@
   "players": {
     "2458054": {
       "name": "wizardsupport",
-      "nickname": "",
+      "nickname": "Wizups",
       "tags": [
         "developer"
       ]
     },
     "77045034": {
       "name": "bwharrison",
-      "nickname": "",
+      "nickname": "Harrison",
       "tags": [
         "developer"
       ]
     },
     "97827574": {
       "name": "bwharrison",
-      "nickname": "",
+      "nickname": "Harrison",
       "tags": [
         "developer"
       ]
@@ -58,7 +58,7 @@
     },
     "58530907": {
       "name": "_ir123_",
-      "nickname": "",
+      "nickname": "ir",
       "tags": [
         "eggforcer"
       ]
@@ -79,7 +79,7 @@
     },
     "30124780": {
       "name": "king_hayden",
-      "nickname": "",
+      "nickname": "King Hayden",
       "tags": [
         "eggforcer",
         "cc"
@@ -87,7 +87,7 @@
     },
     "2919595": {
       "name": "itz_astra.",
-      "nickname": "",
+      "nickname": "Astra",
       "tags": [
         "eggforcer"
       ]
@@ -102,14 +102,14 @@
     },
     "80757664": {
       "name": "arendi_08",
-      "nickname": "",
+      "nickname": "Arendi",
       "tags": [
         "eggforcer"
       ]
     },
     "1943513": {
       "name": "kjdcitsme",
-      "nickname": "",
+      "nickname": "KJDCitsme",
       "tags": [
         "eggforcer"
       ]
@@ -137,7 +137,7 @@
     },
     "49154478": {
       "name": "menoxd",
-      "nickname": "",
+      "nickname": "MenoXD",
       "tags": [
         "eggforcer"
       ]
@@ -151,7 +151,7 @@
     },
     "1177994": {
       "name": "polarizedmoon",
-      "nickname": "",
+      "nickname": "PolarizedMoon",
       "tags": [
         "eggforcer"
       ]
@@ -186,14 +186,14 @@
     },
     "20795141": {
       "name": "infinitesmasher",
-      "nickname": "",
+      "nickname": "Infinite",
       "tags": [
         "eggforcer"
       ]
     },
     "1039224": {
       "name": "thee_owl",
-      "nickname": "",
+      "nickname": "Thee Owl",
       "tags": [
         "eggforcer"
       ]
@@ -242,7 +242,7 @@
     },
     "58268605": {
       "name": "godricgryffindor",
-      "nickname": "",
+      "nickname": "Godric",
       "tags": [
         "member"
       ]
@@ -421,20 +421,6 @@
       "tags": [
         "member"
       ]
-    }
-  },
-  "missingPlayerIds": [
-    {
-      "name": "sapipathebest",
-      "uniqueId": "4247tl6r1q"
-    },
-    {
-      "name": "zerofirehw",
-      "uniqueId": "42x7ksisbd"
-    },
-    {
-      "name": "itshazmatt",
-      "uniqueId": "zfegyhvv57"
     }
   ]
 }
