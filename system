@@ -946,14 +946,14 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             min-width: calc(18 * var(--ss-report-unit)); height: calc(18 * var(--ss-report-unit));
             box-sizing: border-box; padding: 0 calc(4 * var(--ss-report-unit));
             border-radius: calc(6 * var(--ss-report-unit));
-            color: #fff !important; background: #0c576f !important;
+            color: #0c576f !important; background: #fff100 !important;
             font-size: calc(11 * var(--ss-report-unit)) !important;
             font-family: Arial, sans-serif !important; font-weight: 700;
             text-shadow: none !important; letter-spacing: normal;
             line-height: 1; white-space: nowrap; flex: 0 0 auto; cursor: pointer;
         }
         #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
-        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: #fff !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; transition: opacity 0.2s; }
+        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: #0c576f !important; text-shadow: 0 1px 0 rgba(255,255,255,0.4), 0 2px 3px rgba(0,0,0,0.35) !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; transition: opacity 0.2s; }
         #custom-reports-panel .ss-report-header { gap: calc(12 * var(--ss-report-unit)) !important; }
         #custom-reports-panel #ss-refresh-trigger { flex-shrink: 0; white-space: nowrap; }
         #custom-reports-panel #ss-reports-updated { color: #fff !important; }
