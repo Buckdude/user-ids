@@ -924,12 +924,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             display: inline-block; color: #fff !important; font-size: 0.7em;
             font-weight: 900; line-height: 1.2; padding: 2px 8px; border-radius: 5px;
         }
-        #reportInfoPopup #report_popup_recent {
-            display: block; width: fit-content; margin: 4px auto 8px;
-            color: #fff !important; font-size: 13px; font-weight: 700;
-            line-height: 1.2; padding: 1px 6px; border-radius: 5px;
-            text-align: center; white-space: nowrap;
-        }
         #custom-reports-panel .ss-report-log-tags .ss-report-tag {
             display: inline-block; color: #fff !important;
             font-size: calc(9 * var(--ss-report-unit)) !important;
@@ -1073,22 +1067,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         setTimeout(() => clearInterval(checkInput), 3000);
     }
 
-    function keepPopupSize() {
-        const popup = document.getElementById('reportInfoPopup');
-        if (!popup) return;
-        const browserZoom = window.outerWidth > 0 && window.innerWidth > 0
-            ? window.outerWidth / window.innerWidth
-            : window.devicePixelRatio || 1;
-        const viewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
-        const scale = browserZoom * viewportScale;
-        if (!Number.isFinite(scale) || scale <= 0) return;
-        const unit = 1 / scale;
-        popup.style.setProperty('zoom', String(unit), 'important');
-        popup.style.setProperty('max-height', `${Math.max(150, (window.innerHeight - 20) / unit)}px`, 'important');
-    }
-    window.addEventListener('resize', keepPopupSize);
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', keepPopupSize);
-
     function injectPopup() {
         const currentOverlay = document.getElementById('reportPopupOverlay');
         const currentPopup = document.getElementById('reportInfoPopup');
@@ -1123,7 +1101,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     <button class="roundme_sm popup_close clickme" id="closeReportPopupBtn">
                         <i class="fas fa-times text_white fa-2x"></i>
                     </button>
-                    <p id="report_popup_recent" style="text-align: center; color: #fff; width: fit-content; margin: 4px auto 8px; display: none;"></p>
+                    <p id="report_popup_recent" style="text-align: center; font-size: 13px; font-weight: 400; color: #fff; padding: 1px 6px; border-radius: 5px; line-height: 1.2; width: fit-content; margin: 4px auto 8px; display: none;"></p>
                     <div id="report_popup_user_tags" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px;">
                         <span id="report_popup_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
                         <span id="report_popup_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
@@ -1176,7 +1154,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             </div>
         `;
         document.body.appendChild(popupWrap);
-        keepPopupSize();
 
         document.getElementById('closeReportPopupBtn').addEventListener('click', () => {
             document.getElementById('reportPopupOverlay').style.display = 'none';
@@ -1528,6 +1505,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     recentEl.innerText = `${recentCount} RECENT REPORT${recentCount === 1 ? '' : 'S'}`;
                     recentEl.style.color = '#fff';
                     recentEl.style.backgroundColor = recentCount >= 10 ? '#000000' : recentCount >= 5 ? '#900100' : recentCount >= 3 ? '#cc0000' : recentCount === 2 ? '#f79520' : '#ffe600';
+                    recentEl.style.fontWeight = '700';
+                    recentEl.style.fontSize = '13px';
                 }
                 time.innerText = report.time;
                 playerId.textContent = report.pid;
@@ -1571,7 +1550,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 }
                 updateQuickReactionButtons(report.id);
                 overlay.style.display = 'block';
-                keepPopupSize();
                 refreshOpenPopupGithubTags();
                 refreshOpenPopupModerationTags();
                 if (!githubPlayerTags.size || Date.now() - lastGithubTagUpdate > 120000) {
