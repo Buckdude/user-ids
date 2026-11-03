@@ -1,11 +1,6 @@
-globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordToken) {
+globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest) {
     'use strict';
 
-    const DISCORD_TOKEN = String(discordToken ?? '').trim();
-    if (!DISCORD_TOKEN || DISCORD_TOKEN === 'PASTE_TOKEN_HERE') {
-        console.error('[Reports] Token missing.');
-        return;
-    }
     const CHANNEL_ID = "1126624154515406948";
 
     let lastUpdateTime = Date.now();
@@ -649,18 +644,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordToken) 
     }
 
     function requestAPI(method, url) {
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: method,
-                url: url,
-                headers: {
-                    "Authorization": DISCORD_TOKEN,
-                    "Content-Type": "application/json"
-                },
-                onload: (res) => resolve(res),
-                onerror: (err) => reject(err)
-            });
-        });
+        return discordRequest(method, url);
     }
 
 
