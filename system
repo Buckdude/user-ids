@@ -996,7 +996,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         #custom-reports-panel .ss-observe-btn { width: calc(30 * var(--ss-report-unit)) !important; height: auto !important; min-width: calc(30 * var(--ss-report-unit)) !important; align-self: stretch; }
         #custom-reports-panel .ss-report-server-line { display: flex; align-items: center; gap: calc(4 * var(--ss-report-unit)); min-width: 0; }
         #custom-reports-panel .ss-report-server-code { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--ss-report-unit)) !important; font-family: inherit !important; line-height: inherit !important; font-weight: inherit !important; }
-        #custom-reports-panel .ss-report-recent-badge { flex: 0 0 auto; white-space: nowrap; font-size: calc(10 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .ss-report-recent-badge {
+            display: inline-block; flex: 0 0 auto; white-space: nowrap;
+            font-size: calc(10 * var(--ss-report-unit)) !important;
+            padding: calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit));
+            border-radius: calc(4 * var(--ss-report-unit));
+            line-height: 1.2; font-weight: 700;
+        }
         #custom-reports-panel .ss-observe-btn i { font-size: calc(14 * var(--ss-report-unit)) !important; }
         #custom-reports-panel .ss-other-mod-reactions { display: inline-flex; align-items: center; gap: calc(3 * var(--ss-report-unit)); flex: 0 0 auto; white-space: nowrap; }
         #custom-reports-panel .ss-other-mod-reactions .ss-other-mod-emoji { font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1 !important; }
@@ -1369,7 +1375,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                         </h4>
                         ${otherModActionReactions.length ? '</div>' : ''}
                         <p class="nospace text_yellow_bright font-nunito ss-report-server-line" style="font-size: 0.75em; color: #fffc00 !important;">
-                            <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="font-size: 0.85em; color: #fff !important; background: ${recentColor}; padding: 1px 4px; border-radius: 5px; display: inline-block; line-height: 1.2; font-weight: 700;">${recentText}</span>` : ''}
+                            <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span>` : ''}
                         </p>
                         ${reportsView === 'action' && reportClock ? `<span class="ss-report-clock">${reportClock}</span>` : ''}
                     </div>
