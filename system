@@ -996,11 +996,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         #custom-reports-panel .ss-observe-btn { width: calc(30 * var(--ss-report-unit)) !important; height: auto !important; min-width: calc(30 * var(--ss-report-unit)) !important; align-self: stretch; }
         #custom-reports-panel .ss-report-server-line { display: flex; align-items: center; gap: calc(4 * var(--ss-report-unit)); min-width: 0; }
         #custom-reports-panel .ss-report-server-code { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--ss-report-unit)) !important; font-family: inherit !important; line-height: inherit !important; font-weight: inherit !important; }
-        #custom-reports-panel .ss-report-recent-badge {
-            flex: 0 0 auto; white-space: nowrap;
-            padding: calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;
-            border-radius: calc(5 * var(--ss-report-unit)) !important;
-        }
+        #custom-reports-panel .ss-report-recent-badge { flex: 0 0 auto; white-space: nowrap; }
         #custom-reports-panel .ss-observe-btn i { font-size: calc(14 * var(--ss-report-unit)) !important; }
         #custom-reports-panel .ss-other-mod-reactions { display: inline-flex; align-items: center; gap: calc(3 * var(--ss-report-unit)); flex: 0 0 auto; white-space: nowrap; }
         #custom-reports-panel .ss-other-mod-reactions .ss-other-mod-emoji { font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1 !important; }
