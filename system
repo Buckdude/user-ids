@@ -1,4 +1,4 @@
-globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest) {
+globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest, quickEmojis, resolvedEmojis) {
     'use strict';
 
     const CHANNEL_ID = "1126624154515406948";
@@ -11,8 +11,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     const reactionPending = new Set();
     let reportsArray = [];
     let reportsView = 'reports';
-    const QUICK_REACTION_EMOJIS = ['👍', '✅', '❌', '🚪', '❓'];
-    const RESOLVED_REACTION_EMOJIS = ['👍', '✅', '❌'];
     const REPORT_SESSION_KEY = `ss-live-reports-${CHANNEL_ID}-temporary-state`;
     function loadTemporaryReportState() {
         try {
@@ -576,11 +574,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const cacheKey = `${report.id}-${encodeURIComponent(discordEmoji)}`;
             const mine = (cacheKey in reactionCache) ? !!reactionCache[cacheKey] : !!reaction.me;
             if (mine) indicators.push({ ...reaction, mine: true });
-            if (!reaction.emojiId && QUICK_REACTION_EMOJIS.includes(reaction.emoji)) {
+            if (!reaction.emojiId && quickEmojis.includes(reaction.emoji)) {
                 seenQuickEmojis.add(reaction.emoji);
             }
         });
-        QUICK_REACTION_EMOJIS.forEach(emoji => {
+        quickEmojis.forEach(emoji => {
             if (seenQuickEmojis.has(emoji)) return;
             if (reactionCache[`${report.id}-${encodeURIComponent(emoji)}`]) {
                 indicators.push({ emoji, mine: true });
@@ -592,8 +590,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     function isActionTaken(report) {
         const reactions = report.reactions || [];
         const someoneElseReacted = reactions.some(reaction => reaction.count > (reaction.me ? 1 : 0));
-        const myOtherReaction = reactions.some(reaction => reaction.me && !QUICK_REACTION_EMOJIS.includes(reaction.emoji));
-        const myQuickReaction = QUICK_REACTION_EMOJIS.some(emoji => {
+        const myOtherReaction = reactions.some(reaction => reaction.me && !quickEmojis.includes(reaction.emoji));
+        const myQuickReaction = quickEmojis.some(emoji => {
             const key = `${report.id}-${encodeURIComponent(emoji)}`;
             return (key in reactionCache) ? !!reactionCache[key] : reactions.some(r => r.emoji === emoji && r.me);
         });
@@ -601,7 +599,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     }
 
     function hasResolvingReaction(report) {
-        return RESOLVED_REACTION_EMOJIS.some(emoji => {
+        return resolvedEmojis.some(emoji => {
             const key = `${report.id}-${encodeURIComponent(emoji)}`;
             const reaction = (report.reactions || []).find(item => item.emoji === emoji);
             const fromAnotherMod = !!reaction && reaction.count > (reaction.me ? 1 : 0);
@@ -1116,11 +1114,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     </div>
                     <div class="ss-report-popup-quick" style="font-size: 0.9em; color: #0c576f; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: bold; width: 100%; text-align: center;">
                         <span style="color: #0c576f;"><i class="fab fa-discord" style="color: #0c576f;"></i> Quick Actions:</span>
-                        <span class="clickme ss-quick-react" data-emoji="👍">👍</span>
-                        <span class="clickme ss-quick-react" data-emoji="✅">✅</span>
-                        <span class="clickme ss-quick-react" data-emoji="❌">❌</span>
-                        <span class="clickme ss-quick-react" data-emoji="🚪">🚪</span>
-                        <span class="clickme ss-quick-react" data-emoji="❓">❓</span>
+                        ${quickEmojis.map(emoji => `<span class="clickme ss-quick-react" data-emoji="${escapeGithubTag(emoji)}">${escapeGithubTag(emoji)}</span>`).join('')}
                     </div>
                     <p id="report_popup_success" style="display: none; font-weight: bold; margin: 0; font-size: 0.9em; opacity: 0; transition: opacity 0.2s;"></p>
                 </div>
