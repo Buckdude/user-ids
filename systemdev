@@ -45,13 +45,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
         const GITHUB_REFRESH_MS = 15000;
         const GITHUB_MODERATION_REFRESH_MS = 30000;
-        let GITHUB_USER_TAGS_URL = '';
-        let GITHUB_WHITELIST_URL = '';
-        let GITHUB_CHEATER_IDS_URL = '';
-        let GITHUB_KNOWN_CHEATER_NAMES_URL = '';
-        let GITHUB_BOTS_URL = '';
-        let GITHUB_TOXIC_URL = '';
-        let GITHUB_BWD_MEMBER_URL = '';
+        let githubLinkHub = null;
         let githubLinkHubLoading = false;
         let githubLinksWarningShown = false;
         let lastModerationRefresh = 0;
@@ -129,9 +123,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function loadGitHubToxicList() {
-            if (!/^https:\/\//i.test(GITHUB_TOXIC_URL)) return;
+            if (!/^https:\/\//i.test(githubLinkHub?.GITHUB_TOXIC_URL || '')) return;
             const generation = moderationRequestGeneration;
-            const urlWithRefresh = `${GITHUB_TOXIC_URL}${GITHUB_TOXIC_URL.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
+            const urlWithRefresh = `${githubLinkHub.GITHUB_TOXIC_URL}${githubLinkHub.GITHUB_TOXIC_URL.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: urlWithRefresh,
@@ -186,11 +180,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         function loadGitHubModerationLists() {
             moderationRequestGeneration++;
-            loadGitHubModerationTextList(GITHUB_WHITELIST_URL, WHITELISTED_PLAYER_IDS, true, 'whitelist');
-            loadGitHubModerationTextList(GITHUB_CHEATER_IDS_URL, KNOWN_CHEATER_PLAYER_IDS, true, 'cheater IDs');
-            loadGitHubModerationTextList(GITHUB_KNOWN_CHEATER_NAMES_URL, KNOWN_CHEATER_NAMES, false, 'known cheater names');
-            loadGitHubModerationTextList(GITHUB_BOTS_URL, BOT_NAMES, false, 'bot names');
-            loadGitHubModerationTextList(GITHUB_BWD_MEMBER_URL, GITHUB_BWD_MEMBER_IDS, true, 'BWD member IDs');
+            loadGitHubModerationTextList(githubLinkHub?.GITHUB_WHITELIST_URL, WHITELISTED_PLAYER_IDS, true, 'whitelist');
+            loadGitHubModerationTextList(githubLinkHub?.GITHUB_CHEATER_IDS_URL, KNOWN_CHEATER_PLAYER_IDS, true, 'cheater IDs');
+            loadGitHubModerationTextList(githubLinkHub?.GITHUB_KNOWN_CHEATER_NAMES_URL, KNOWN_CHEATER_NAMES, false, 'known cheater names');
+            loadGitHubModerationTextList(githubLinkHub?.GITHUB_BOTS_URL, BOT_NAMES, false, 'bot names');
+            loadGitHubModerationTextList(githubLinkHub?.GITHUB_BWD_MEMBER_URL, GITHUB_BWD_MEMBER_IDS, true, 'BWD member IDs');
             loadGitHubToxicList();
         }
 
@@ -198,7 +192,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         let lastGithubTagUpdate = 0;
         let githubTagsLoading = false;
         let githubTagsLoadingUrl = '';
-        const getGithubTagsCacheKey = () => 'ss-live-reports-tag-data:' + encodeURIComponent(GITHUB_USER_TAGS_URL);
+        const getGithubTagsCacheKey = () => 'ss-live-reports-tag-data:' + encodeURIComponent(githubLinkHub?.GITHUB_USER_TAGS_URL || '');
         let githubNameTagsEnabled = false;
 
         function getGithubPlayer(playerId) {
@@ -228,7 +222,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function restoreGithubTagsForCurrentUrl() {
-            if (!GITHUB_USER_TAGS_URL) return;
+            if (!githubLinkHub?.GITHUB_USER_TAGS_URL) return;
             try {
                 const stored = GM_getValue(getGithubTagsCacheKey(), '');
                 if (stored) applyGithubPlayerTags(JSON.parse(stored));
@@ -317,14 +311,14 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function loadGithubPlayerTags() {
-            if (!GITHUB_USER_TAGS_URL || (githubTagsLoading && githubTagsLoadingUrl === GITHUB_USER_TAGS_URL)) return;
+            if (!githubLinkHub?.GITHUB_USER_TAGS_URL || (githubTagsLoading && githubTagsLoadingUrl === githubLinkHub.GITHUB_USER_TAGS_URL)) return;
             githubTagsLoading = true;
-            const requestedTagUrl = GITHUB_USER_TAGS_URL;
+            const requestedTagUrl = githubLinkHub.GITHUB_USER_TAGS_URL;
             githubTagsLoadingUrl = requestedTagUrl;
             const url = `${requestedTagUrl}${requestedTagUrl.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
 
             function acceptResponse(raw) {
-                if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+                if (githubLinkHub?.GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
                 const { data } = parseGithubUsersPayload(raw);
                 applyGithubPlayerTags(data);
                 const cachedPlayers = {};
@@ -335,7 +329,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
 
             function tryBrowserFetch(reason) {
-                if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+                if (githubLinkHub?.GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
                 if (typeof fetch !== 'function') {
                     failLoad(reason + '; browser fetch unavailable');
                     return;
@@ -350,7 +344,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
 
             function failLoad(reason) {
-                if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+                if (githubLinkHub?.GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
                 githubTagsLoading = false;
                 console.error('[Reports] Tags failed:', reason);
             }
@@ -459,22 +453,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             });
         }
         function useGithubLinkHub(links, force = false) {
-            const tagUrlChanged = GITHUB_USER_TAGS_URL !== links.GITHUB_USER_TAGS_URL;
-            const moderationUrlChanged = [
-                GITHUB_WHITELIST_URL !== links.GITHUB_WHITELIST_URL,
-                GITHUB_CHEATER_IDS_URL !== links.GITHUB_CHEATER_IDS_URL,
-                GITHUB_KNOWN_CHEATER_NAMES_URL !== links.GITHUB_KNOWN_CHEATER_NAMES_URL,
-                GITHUB_BOTS_URL !== links.GITHUB_BOTS_URL,
-                GITHUB_TOXIC_URL !== links.GITHUB_TOXIC_URL,
-                GITHUB_BWD_MEMBER_URL !== links.GITHUB_BWD_MEMBER_URL
-            ].some(Boolean);
-            GITHUB_USER_TAGS_URL = links.GITHUB_USER_TAGS_URL;
-            GITHUB_WHITELIST_URL = links.GITHUB_WHITELIST_URL;
-            GITHUB_CHEATER_IDS_URL = links.GITHUB_CHEATER_IDS_URL;
-            GITHUB_KNOWN_CHEATER_NAMES_URL = links.GITHUB_KNOWN_CHEATER_NAMES_URL;
-            GITHUB_BOTS_URL = links.GITHUB_BOTS_URL;
-            GITHUB_TOXIC_URL = links.GITHUB_TOXIC_URL;
-            GITHUB_BWD_MEMBER_URL = links.GITHUB_BWD_MEMBER_URL;
+            const tagUrlChanged = githubLinkHub?.GITHUB_USER_TAGS_URL !== links.GITHUB_USER_TAGS_URL;
+            const moderationUrlChanged = HUB_REQUIRED_LINK_KEYS
+                .filter(key => key !== 'GITHUB_USER_TAGS_URL')
+                .some(key => githubLinkHub?.[key] !== links[key]);
+            githubLinkHub = links;
             if (tagUrlChanged) {
                 githubTagsLoading = false;
                 githubPlayerTags = new Map();
@@ -494,6 +477,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 loadGithubPlayerTags();
             }
         }
+
         async function loadGithubLinkHub(force = false) {
             if (githubLinkHubLoading) return;
             githubLinkHubLoading = true;
