@@ -101,9 +101,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     }
 
     function refreshOpenPopupModerationTags() {
-        const overlay = document.getElementById('reportPopupOverlay');
+        const popup = document.getElementById('reportInfoPopup');
         const report = window.currentSelectedReport;
-        if (!overlay || overlay.style.display === 'none' || !report) return;
+        if (!popup || popup.style.display === 'none' || !report) return;
         const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
         const reporterName = reporterMatch ? reporterMatch[1].trim() : report.reporter;
         const reporterId = reporterMatch ? reporterMatch[2] : '';
@@ -111,10 +111,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             ['report_popup_', report.name, report.pid],
             ['report_popup_reporter_', reporterName, reporterId]
         ]) {
-            const label = overlay.querySelector(`#${prefix}cheater_label`);
-            const toxicLabel = overlay.querySelector(`#${prefix}toxic_label`);
-            const botLabel = overlay.querySelector(`#${prefix}bot_label`);
-            const tagsEl = overlay.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
+            const label = popup.querySelector(`#${prefix}cheater_label`);
+            const toxicLabel = popup.querySelector(`#${prefix}toxic_label`);
+            const botLabel = popup.querySelector(`#${prefix}bot_label`);
+            const tagsEl = popup.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
             const nameLabel = getReportNameLabel(name, pid);
             const isCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
             if (label) {
@@ -380,24 +380,24 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     }
 
     function refreshOpenPopupGithubTags() {
-        const overlay = document.getElementById('reportPopupOverlay');
+        const popup = document.getElementById('reportInfoPopup');
         const report = window.currentSelectedReport;
-        if (!overlay || overlay.style.display === 'none' || !report) return;
+        if (!popup || popup.style.display === 'none' || !report) return;
         const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
         const reporterId = reporterMatch ? reporterMatch[2] : '';
         for (const [prefix, pid] of [
             ['report_popup_', report.pid],
             ['report_popup_reporter_', reporterId]
         ]) {
-            const nameLabel = overlay.querySelector(`#${prefix}name_label`);
-            const tagsEl = overlay.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
+            const nameLabel = popup.querySelector(`#${prefix}name_label`);
+            const tagsEl = popup.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
             if (!nameLabel || !tagsEl) continue;
             const displayName = getGithubNameTag(pid);
             nameLabel.textContent = displayName;
             nameLabel.style.display = displayName ? 'inline-block' : 'none';
             if (prefix === 'report_popup_' || prefix === 'report_popup_reporter_') {
                 const wrapId = prefix === 'report_popup_' ? 'report_popup_name_tag_wrap' : 'report_popup_reporter_name_tag_wrap';
-                const nameTagWrap = overlay.querySelector(`#${wrapId}`);
+                const nameTagWrap = popup.querySelector(`#${wrapId}`);
                 if (nameTagWrap) nameTagWrap.style.display = displayName ? 'flex' : 'none';
             }
             const roles = {
@@ -407,7 +407,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 wizard_label: isWizardPlayer(pid)
             };
             for (const [suffix, enabled] of Object.entries(roles)) {
-                const label = overlay.querySelector(`#${prefix}${suffix}`);
+                const label = popup.querySelector(`#${prefix}${suffix}`);
                 if (label) label.style.display = enabled ? 'inline-block' : 'none';
             }
             orderPopupReportTags(tagsEl, pid);
@@ -1067,23 +1067,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         setTimeout(() => clearInterval(checkInput), 3000);
     }
 
-    function syncReportPopupZoom() {
-        const popup = document.getElementById('reportInfoPopup');
-        if (!popup) return;
-        const browserZoom = window.outerWidth > 0 && window.innerWidth > 0
-            ? window.outerWidth / window.innerWidth
-            : window.devicePixelRatio || 1;
-        const viewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
-        const scale = browserZoom * viewportScale;
-        if (!Number.isFinite(scale) || scale <= 0) return;
-        const unit = 1 / scale;
-        popup.style.setProperty('zoom', String(unit), 'important');
-        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        popup.style.setProperty('max-height', `${Math.max(180, viewportHeight / unit - 20)}px`, 'important');
-    }
-    window.addEventListener('resize', syncReportPopupZoom);
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', syncReportPopupZoom);
-
     function injectPopup() {
         const currentOverlay = document.getElementById('reportPopupOverlay');
         const currentPopup = document.getElementById('reportInfoPopup');
@@ -1101,11 +1084,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             'report_popup_join_btn', 'report_popup_observe_btn',
             'closeReportPopupBtn'
         ];
-        if (currentOverlay && currentPopup && currentOverlay.contains(currentPopup) &&
-            requiredPopupIds.every(id => currentOverlay.querySelector(`#${id}`))) {
-            syncReportPopupZoom();
-            return;
-        }
+        if (currentOverlay && currentPopup && currentPopup.parentElement === document.body &&
+            requiredPopupIds.every(id => currentPopup.querySelector(`#${id}`))) return;
         if (currentOverlay) currentOverlay.remove();
         if (currentPopup) currentPopup.remove();
 
@@ -1113,10 +1093,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         popupWrap.id = "reportPopupOverlay";
         popupWrap.className = "popup_overlay";
         popupWrap.style.display = "none";
-        popupWrap.style.zIndex = "999999";
+        popupWrap.style.zIndex = "999998";
+        document.body.appendChild(popupWrap);
 
-        popupWrap.innerHTML = `
-            <div class="popup_window popup_sm roundme_md centered" id="reportInfoPopup">
+        const reportPopupHTML = `
+            <div class="popup_window popup_sm roundme_md centered" id="reportInfoPopup" style="display: none; z-index: 999999;">
                 <div>
                     <button class="roundme_sm popup_close clickme" id="closeReportPopupBtn">
                         <i class="fas fa-times text_white fa-2x"></i>
@@ -1173,14 +1154,16 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 </div>
             </div>
         `;
-        document.body.appendChild(popupWrap);
-        syncReportPopupZoom();
+        document.body.insertAdjacentHTML('beforeend', reportPopupHTML);
 
-        document.getElementById('closeReportPopupBtn').addEventListener('click', () => {
-            document.getElementById('reportPopupOverlay').style.display = 'none';
-        });
-        popupWrap.addEventListener('click', (e) => {
-            if(e.target === popupWrap) popupWrap.style.display = 'none';
+        function closeReportPopup() {
+            popupWrap.style.display = 'none';
+            const popup = document.getElementById('reportInfoPopup');
+            if (popup) popup.style.display = 'none';
+        }
+        document.getElementById('closeReportPopupBtn').addEventListener('click', closeReportPopup);
+        popupWrap.addEventListener('click', event => {
+            if (event.target === popupWrap) closeReportPopup();
         });
 
         const copyFlashTimers = new WeakMap();
@@ -1252,7 +1235,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         document.getElementById('report_popup_join_btn').addEventListener('click', () => {
             if (!window.currentSelectedReport) return;
-            document.getElementById('reportPopupOverlay').style.display = 'none';
+            closeReportPopup();
             doAutoJoin(window.currentSelectedReport.server);
         });
         document.getElementById('report_popup_observe_btn').addEventListener('click', () => {
@@ -1469,29 +1452,30 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             textWrap.addEventListener('click', () => {
                 injectPopup();
                 const overlay = document.getElementById('reportPopupOverlay');
-                if (!overlay) return;
-                const title = overlay.querySelector('#report_popup_title');
-                const recentEl = overlay.querySelector('#report_popup_recent');
-                const userTags = overlay.querySelector('#report_popup_user_tags');
-                const cheaterLabel = overlay.querySelector('#report_popup_cheater_label');
-                const toxicLabel = overlay.querySelector('#report_popup_toxic_label');
-                const botLabel = overlay.querySelector('#report_popup_bot_label');
-                const creatorLabel = overlay.querySelector('#report_popup_creator_label');
-                const memberLabel = overlay.querySelector('#report_popup_member_label');
-                const time = overlay.querySelector('#report_popup_time');
-                const playerId = overlay.querySelector('#report_popup_pid_value');
-                const reporterName = overlay.querySelector('#report_popup_reporter_name');
-                const reporterId = overlay.querySelector('#report_popup_reporter_id');
-                const reporterIdLine = overlay.querySelector('#report_popup_reporter_id_line');
-                const reporterTags = overlay.querySelector('#report_popup_reporter_tags');
-                const reporterCheaterLabel = overlay.querySelector('#report_popup_reporter_cheater_label');
-                const reporterToxicLabel = overlay.querySelector('#report_popup_reporter_toxic_label');
-                const reporterBotLabel = overlay.querySelector('#report_popup_reporter_bot_label');
-                const reporterCreatorLabel = overlay.querySelector('#report_popup_reporter_creator_label');
-                const reporterMemberLabel = overlay.querySelector('#report_popup_reporter_member_label');
-                const reporterEggforcerLabel = overlay.querySelector('#report_popup_reporter_eggforcer_label');
-                const reason = overlay.querySelector('#report_popup_reason');
-                const reactionStatus = overlay.querySelector('#report_popup_success');
+                const popup = document.getElementById('reportInfoPopup');
+                if (!overlay || !popup) return;
+                const title = popup.querySelector('#report_popup_title');
+                const recentEl = popup.querySelector('#report_popup_recent');
+                const userTags = popup.querySelector('#report_popup_user_tags');
+                const cheaterLabel = popup.querySelector('#report_popup_cheater_label');
+                const toxicLabel = popup.querySelector('#report_popup_toxic_label');
+                const botLabel = popup.querySelector('#report_popup_bot_label');
+                const creatorLabel = popup.querySelector('#report_popup_creator_label');
+                const memberLabel = popup.querySelector('#report_popup_member_label');
+                const time = popup.querySelector('#report_popup_time');
+                const playerId = popup.querySelector('#report_popup_pid_value');
+                const reporterName = popup.querySelector('#report_popup_reporter_name');
+                const reporterId = popup.querySelector('#report_popup_reporter_id');
+                const reporterIdLine = popup.querySelector('#report_popup_reporter_id_line');
+                const reporterTags = popup.querySelector('#report_popup_reporter_tags');
+                const reporterCheaterLabel = popup.querySelector('#report_popup_reporter_cheater_label');
+                const reporterToxicLabel = popup.querySelector('#report_popup_reporter_toxic_label');
+                const reporterBotLabel = popup.querySelector('#report_popup_reporter_bot_label');
+                const reporterCreatorLabel = popup.querySelector('#report_popup_reporter_creator_label');
+                const reporterMemberLabel = popup.querySelector('#report_popup_reporter_member_label');
+                const reporterEggforcerLabel = popup.querySelector('#report_popup_reporter_eggforcer_label');
+                const reason = popup.querySelector('#report_popup_reason');
+                const reactionStatus = popup.querySelector('#report_popup_success');
                 if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
 
                 window.currentSelectedReport = report;
@@ -1505,10 +1489,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const showEggforcer = hasGithubRole(report.pid, 'eggforcer');
                 const showWizard = isWizardPlayer(report.pid);
                 const nameTag = getGithubNameTag(report.pid);
-                const nameLabelEl = overlay.querySelector('#report_popup_name_label');
-                const nameTagWrap = overlay.querySelector('#report_popup_name_tag_wrap');
-                const eggforcerLabel = overlay.querySelector('#report_popup_eggforcer_label');
-                const wizardLabel = overlay.querySelector('#report_popup_wizard_label');
+                const nameLabelEl = popup.querySelector('#report_popup_name_label');
+                const nameTagWrap = popup.querySelector('#report_popup_name_tag_wrap');
+                const eggforcerLabel = popup.querySelector('#report_popup_eggforcer_label');
+                const wizardLabel = popup.querySelector('#report_popup_wizard_label');
                 if (nameLabelEl) { nameLabelEl.textContent = nameTag; nameLabelEl.style.display = nameTag ? 'inline-block' : 'none'; }
                 if (nameTagWrap) nameTagWrap.style.display = nameTag ? 'flex' : 'none';
                 if (eggforcerLabel) eggforcerLabel.style.display = showEggforcer ? 'inline-block' : 'none';
@@ -1546,9 +1530,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const reporterEggforcer = hasGithubRole(reporterPlayerId, 'eggforcer');
                 const reporterWizard = isWizardPlayer(reporterPlayerId);
                 const reporterNameTag = getGithubNameTag(reporterPlayerId);
-                const reporterNameTagLabel = overlay.querySelector('#report_popup_reporter_name_label');
-                const reporterNameTagWrap = overlay.querySelector('#report_popup_reporter_name_tag_wrap');
-                const reporterWizardLabel = overlay.querySelector('#report_popup_reporter_wizard_label');
+                const reporterNameTagLabel = popup.querySelector('#report_popup_reporter_name_label');
+                const reporterNameTagWrap = popup.querySelector('#report_popup_reporter_name_tag_wrap');
+                const reporterWizardLabel = popup.querySelector('#report_popup_reporter_wizard_label');
                 if (reporterNameTagLabel) { reporterNameTagLabel.textContent = reporterNameTag; reporterNameTagLabel.style.display = reporterNameTag ? 'inline-block' : 'none'; }
                 if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameTag ? 'flex' : 'none';
                 if (reporterWizardLabel) reporterWizardLabel.style.display = reporterWizard ? 'inline-block' : 'none';
@@ -1571,7 +1555,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 }
                 updateQuickReactionButtons(report.id);
                 overlay.style.display = 'block';
-                syncReportPopupZoom();
+                popup.style.display = 'flex';
                 refreshOpenPopupGithubTags();
                 refreshOpenPopupModerationTags();
                 if (!githubPlayerTags.size || Date.now() - lastGithubTagUpdate > 120000) {
