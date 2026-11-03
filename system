@@ -246,13 +246,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function isScriptDevPlayer(playerId) {
-            return hasGithubRole(playerId, 'developer') ||
-                hasGithubRole(playerId, 'dev') ||
-                hasGithubRole(playerId, 'script_dev');
+            const tags = getGithubPlayer(playerId)?.tags || [];
+            return tags.includes('developer') || tags.includes('dev') || tags.includes('script_dev');
         }
 
         function isWizardPlayer(playerId) {
-            return hasGithubRole(playerId, 'wizard');
+            const tags = getGithubPlayer(playerId)?.tags || [];
+            return tags.includes('wizard');
         }
 
         function getOrderedReportTagKeys(playerId) {
