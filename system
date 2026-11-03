@@ -953,6 +953,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             line-height: 1; white-space: nowrap; flex: 0 0 auto; cursor: pointer;
         }
         #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
+        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; color: #0c576f !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; }
         #custom-reports-panel .ss-report-header { gap: calc(12 * var(--ss-report-unit)) !important; }
         #custom-reports-panel #ss-refresh-trigger { flex-shrink: 0; white-space: nowrap; }
         #custom-reports-panel #ss-reports-updated { color: #fff !important; }
@@ -1236,6 +1237,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         const actionCount = getVisibleReports(reportsArr || [], 'action').length;
         reportsBadge.textContent = reportsCount > 0 ? String(reportsCount) : '';
         reportsBadge.style.display = reportsCount > 0 && reportsView === 'reports' ? 'inline-flex' : 'none';
+        const discordCopy = document.getElementById('ss-reports-discord-copy');
+        if (discordCopy) discordCopy.style.display = reportsView === 'reports' ? 'inline-flex' : 'none';
         actionBadge.textContent = actionCount > 0 ? String(actionCount) : '';
         actionBadge.style.display = actionCount > 0 && reportsView === 'action' ? 'inline-flex' : 'none';
     }
@@ -1404,7 +1407,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
 
                 window.currentSelectedReport = report;
-                title.innerText = originalReportName;
+                title.innerText = originalReportName; // Exact username; bot detection never changes it.
                 const nameLabel = getReportNameLabel(report.name, report.pid);
                 const showCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
                 const showToxic = isToxicPlayer(report.name, report.pid);
@@ -1515,6 +1518,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                         <div class="ss-report-heading-group">
                             <div class="clickme" id="ss-reports-view-toggle" style="font-size: 1em; cursor: pointer;" title="Switch between Reports and Action taken">Reports</div>
                             <span id="ss-reports-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Action taken" title="View Action taken"></span>
+                            <i id="ss-reports-discord-copy" class="fab fa-discord" role="button" tabindex="0" aria-label="Copy Discord link" title="Copy Discord link"></i>
                             <span id="ss-action-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Reports" title="View Reports"></span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" id="ss-refresh-trigger" title="Force Refresh">
@@ -1604,6 +1608,37 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     }
                 });
             });
+
+            const discordCopyIcon = reportsBox.querySelector('#ss-reports-discord-copy');
+            if (discordCopyIcon) {
+                let discordFadeTimer;
+                const copyDiscordLink = async () => {
+                    discordCopyIcon.style.opacity = '0.5';
+                    clearTimeout(discordFadeTimer);
+                    discordFadeTimer = setTimeout(() => { discordCopyIcon.style.opacity = '1'; }, 200);
+                    const value = 'https://discord.com/app';
+                    try {
+                        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+                        await navigator.clipboard.writeText(value);
+                    } catch (_) {
+                        const input = document.createElement('textarea');
+                        input.value = value;
+                        input.style.position = 'fixed';
+                        input.style.opacity = '0';
+                        document.body.appendChild(input);
+                        input.select();
+                        document.execCommand('copy');
+                        input.remove();
+                    }
+                };
+                discordCopyIcon.addEventListener('click', copyDiscordLink);
+                discordCopyIcon.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        copyDiscordLink();
+                    }
+                });
+            }
 
             document.getElementById('ss-refresh-trigger').addEventListener('click', () => {
                 const icon = document.getElementById('ss-refresh-icon');
