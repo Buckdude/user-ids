@@ -1067,6 +1067,23 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         setTimeout(() => clearInterval(checkInput), 3000);
     }
 
+    function syncReportPopupZoom() {
+        const popup = document.getElementById('reportInfoPopup');
+        if (!popup) return;
+        const browserZoom = window.outerWidth > 0 && window.innerWidth > 0
+            ? window.outerWidth / window.innerWidth
+            : window.devicePixelRatio || 1;
+        const viewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
+        const scale = browserZoom * viewportScale;
+        if (!Number.isFinite(scale) || scale <= 0) return;
+        const unit = 1 / scale;
+        popup.style.setProperty('zoom', String(unit), 'important');
+        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        popup.style.setProperty('max-height', `${Math.max(180, viewportHeight / unit - 20)}px`, 'important');
+    }
+    window.addEventListener('resize', syncReportPopupZoom);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', syncReportPopupZoom);
+
     function injectPopup() {
         const currentOverlay = document.getElementById('reportPopupOverlay');
         const currentPopup = document.getElementById('reportInfoPopup');
@@ -1085,7 +1102,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             'closeReportPopupBtn'
         ];
         if (currentOverlay && currentPopup && currentOverlay.contains(currentPopup) &&
-            requiredPopupIds.every(id => currentOverlay.querySelector(`#${id}`))) return;
+            requiredPopupIds.every(id => currentOverlay.querySelector(`#${id}`))) {
+            syncReportPopupZoom();
+            return;
+        }
         if (currentOverlay) currentOverlay.remove();
         if (currentPopup) currentPopup.remove();
 
@@ -1154,6 +1174,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             </div>
         `;
         document.body.appendChild(popupWrap);
+        syncReportPopupZoom();
 
         document.getElementById('closeReportPopupBtn').addEventListener('click', () => {
             document.getElementById('reportPopupOverlay').style.display = 'none';
@@ -1550,6 +1571,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 }
                 updateQuickReactionButtons(report.id);
                 overlay.style.display = 'block';
+                syncReportPopupZoom();
                 refreshOpenPopupGithubTags();
                 refreshOpenPopupModerationTags();
                 if (!githubPlayerTags.size || Date.now() - lastGithubTagUpdate > 120000) {
