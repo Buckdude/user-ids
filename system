@@ -953,7 +953,21 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             line-height: 1; white-space: nowrap; flex: 0 0 auto; cursor: pointer;
         }
         #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
-        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: #0c576f !important; text-shadow: 0 1px 0 rgba(255,255,255,0.4), 0 2px 3px rgba(0,0,0,0.35) !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; transition: opacity 0.2s; }
+        #custom-reports-panel #ss-reports-discord-copy {
+            display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+            color: #0c576f !important; background: transparent !important;
+            border: none !important; border-radius: 0 !important;
+            box-shadow: none !important; text-shadow: none !important;
+            filter: none !important; -webkit-text-stroke: 0 !important;
+            padding: 0 !important; cursor: pointer;
+            font-size: calc(16 * var(--ss-report-unit)) !important;
+            line-height: 1; opacity: 1; transition: opacity 0.2s;
+        }
+        #custom-reports-panel #ss-reports-discord-copy::before {
+            color: #0c576f !important; background: transparent !important;
+            box-shadow: none !important; text-shadow: none !important; filter: none !important;
+        }
+        #custom-reports-panel #ss-reports-discord-copy::after { content: none !important; }
         #custom-reports-panel .ss-report-header { gap: calc(12 * var(--ss-report-unit)) !important; }
         #custom-reports-panel #ss-refresh-trigger { flex-shrink: 0; white-space: nowrap; }
         #custom-reports-panel #ss-reports-updated { color: #fff !important; }
@@ -982,7 +996,12 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         #custom-reports-panel .ss-observe-btn { width: calc(30 * var(--ss-report-unit)) !important; height: auto !important; min-width: calc(30 * var(--ss-report-unit)) !important; align-self: stretch; }
         #custom-reports-panel .ss-report-server-line { display: flex; align-items: center; gap: calc(4 * var(--ss-report-unit)); min-width: 0; }
         #custom-reports-panel .ss-report-server-code { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--ss-report-unit)) !important; font-family: inherit !important; line-height: inherit !important; font-weight: inherit !important; }
-        #custom-reports-panel .ss-report-recent-badge { flex: 0 0 auto; white-space: nowrap; }
+        #custom-reports-panel .ss-report-recent-badge {
+            flex: 0 0 auto; white-space: nowrap;
+            font-size: calc(9.35 * var(--ss-report-unit)) !important;
+            padding: calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;
+            border-radius: calc(5 * var(--ss-report-unit)) !important;
+        }
         #custom-reports-panel .ss-observe-btn i { font-size: calc(14 * var(--ss-report-unit)) !important; }
         #custom-reports-panel .ss-other-mod-reactions { display: inline-flex; align-items: center; gap: calc(3 * var(--ss-report-unit)); flex: 0 0 auto; white-space: nowrap; }
         #custom-reports-panel .ss-other-mod-reactions .ss-other-mod-emoji { font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1 !important; }
