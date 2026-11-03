@@ -41,7 +41,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             return originalCount;
         }
 
-        const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/admin';
+        const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/links';
         const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
         const GITHUB_REFRESH_MS = 15000;
         const GITHUB_MODERATION_REFRESH_MS = 30000;
@@ -1393,6 +1393,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             reason.style.textAlign = 'center';
             reason.style.overflow = 'hidden';
 
+            // Use the same readable type size for two or more reasons; expand the popup first.
             const fontSizes = {
             1: 1.10,
             2: 0.98,
@@ -1658,7 +1659,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !serverCode || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
 
                     window.currentSelectedReport = report;
-                    title.innerText = originalReportName;
+                    title.innerText = originalReportName; // Exact username; bot detection never changes it.
                     const nameLabel = getReportNameLabel(report.name, report.pid);
                     const showCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
                     const showToxic = isToxicPlayer(report.name, report.pid);
