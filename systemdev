@@ -1147,7 +1147,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                         </button>
                     </div>
                     <div class="ss-report-popup-quick" style="font-size: 0.9em; color: #0c576f; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: bold; width: 100%; text-align: center;">
-                        <span style="color: #0c576f;"><i class="fab fa-discord" style="color: #0c576f;"></i> Quick Actions:</span>
+                        <span style="color: #0c576f;"><i class="fab fa-discord" style="color: #0c576f;"></i> Actions:</span>
                         ${quickEmojis.map(emoji => `<span class="clickme ss-quick-react" data-emoji="${escapeGithubTag(emoji)}">${escapeGithubTag(emoji)}</span>`).join('')}
                     </div>
                     <p id="report_popup_success" style="display: none; font-weight: bold; margin: 0; font-size: 0.9em; opacity: 0; transition: opacity 0.2s;"></p>
