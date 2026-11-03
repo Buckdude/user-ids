@@ -914,7 +914,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             .ss-report-tag-nametag { color: #fff !important; background: #0c576f !important; }
             .ss-report-tag-wizard { color: #fff !important; background: #3498db !important; }
             #reportInfoPopup .ss-report-user-tags .ss-report-tag.ss-report-tag-script-dev,
-            #custom-reports-panel .ss-report-log-tags .ss-report-tag.ss-report-tag-script-dev { color: #95e2fe !important; background: #000 !important; box-shadow: inset 0 0 0 1px #8ed3ea !important; }
+            #custom-reports-panel .ss-report-log-tags .ss-report-tag.ss-report-tag-script-dev { color: #c2fbbf !important; background: #000 !important; box-shadow: none !important; }
             #custom-reports-panel .ss-report-log-tags { flex-wrap: wrap; }
             #reportInfoPopup .ss-report-user-tags .ss-report-tag {
                 display: inline-block; color: #fff !important; font-size: 0.7em;
@@ -1525,7 +1525,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const isScriptDev = isScriptDevPlayer(report.pid);
                 const githubNameTag = getGithubNameTag(report.pid);
                 const logBadgeHtmlByKey = {
-                    script_dev: isScriptDev ? '<span class="ss-report-tag ss-report-tag-script-dev">SCRIPT DEV</span>' : '',
+                    script_dev: isScriptDev ? '<span class="ss-report-tag ss-report-tag-script-dev">DEV</span>' : '',
                     wizard: isWizard ? '<span class="ss-report-tag ss-report-tag-wizard">WIZARD</span>' : '',
                     eggforcer: isEggforcer ? '<span class="ss-report-tag ss-report-tag-eggforcer">EGGFORCER</span>' : '',
                     cc: isCreator ? '<span class="ss-report-tag ss-report-tag-creator">CC</span>' : '',
