@@ -953,7 +953,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             line-height: 1; white-space: nowrap; flex: 0 0 auto; cursor: pointer;
         }
         #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
-        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; color: #0c576f !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; }
+        #custom-reports-panel #ss-reports-discord-copy { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; color: #0c576f !important; cursor: pointer; font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1; opacity: 1; transition: opacity 0.2s; }
         #custom-reports-panel .ss-report-header { gap: calc(12 * var(--ss-report-unit)) !important; }
         #custom-reports-panel #ss-refresh-trigger { flex-shrink: 0; white-space: nowrap; }
         #custom-reports-panel #ss-reports-updated { color: #fff !important; }
@@ -1229,6 +1229,54 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         });
     }
 
+    function ensureReportsDiscordIcon(reportsBox) {
+        const heading = reportsBox?.querySelector('.ss-report-heading-group');
+        const count = heading?.querySelector('#ss-reports-count');
+        if (!count) return;
+        let icon = heading.querySelector('#ss-reports-discord-copy');
+        if (!icon) {
+            icon = document.createElement('i');
+            icon.id = 'ss-reports-discord-copy';
+            icon.className = 'fab fa-discord';
+            icon.setAttribute('role', 'button');
+            icon.setAttribute('tabindex', '0');
+            icon.setAttribute('aria-label', 'Copy Discord link');
+            icon.title = 'Copy Discord link';
+        }
+        if (count.nextElementSibling !== icon) count.insertAdjacentElement('afterend', icon);
+        const view = heading.querySelector('#ss-reports-view-toggle')?.textContent.trim().toLowerCase();
+        icon.style.display = view === 'reports' ? 'inline-flex' : 'none';
+        if (icon.dataset.ssDiscordReady === '1') return;
+        icon.dataset.ssDiscordReady = '1';
+        let fadeTimer;
+        const copyLink = async () => {
+            icon.style.opacity = '0.5';
+            clearTimeout(fadeTimer);
+            fadeTimer = setTimeout(() => { icon.style.opacity = '1'; }, 200);
+            const value = 'https://discord.com/app';
+            try {
+                if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+                await navigator.clipboard.writeText(value);
+            } catch (_) {
+                const input = document.createElement('textarea');
+                input.value = value;
+                input.style.position = 'fixed';
+                input.style.opacity = '0';
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                input.remove();
+            }
+        };
+        icon.addEventListener('click', copyLink);
+        icon.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                copyLink();
+            }
+        });
+    }
+
     function updateLogCounters(reportsArr) {
         const reportsBadge = document.getElementById('ss-reports-count');
         const actionBadge = document.getElementById('ss-action-count');
@@ -1237,8 +1285,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         const actionCount = getVisibleReports(reportsArr || [], 'action').length;
         reportsBadge.textContent = reportsCount > 0 ? String(reportsCount) : '';
         reportsBadge.style.display = reportsCount > 0 && reportsView === 'reports' ? 'inline-flex' : 'none';
-        const discordCopy = document.getElementById('ss-reports-discord-copy');
-        if (discordCopy) discordCopy.style.display = reportsView === 'reports' ? 'inline-flex' : 'none';
+        ensureReportsDiscordIcon(document.getElementById('custom-reports-panel'));
         actionBadge.textContent = actionCount > 0 ? String(actionCount) : '';
         actionBadge.style.display = actionCount > 0 && reportsView === 'action' ? 'inline-flex' : 'none';
     }
@@ -1504,8 +1551,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
     const initReportsPanel = setInterval(() => {
         const asideWrap = document.querySelector('.secondary-aside-wrap');
+        const existingPanel = asideWrap?.querySelector(':scope > #custom-reports-panel');
+        if (existingPanel) ensureReportsDiscordIcon(existingPanel);
 
-        if (asideWrap && !asideWrap.querySelector(':scope > #custom-reports-panel')) {
+        if (asideWrap && !existingPanel) {
             injectPopup();
             fetchDiscordReports();
 
@@ -1609,36 +1658,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 });
             });
 
-            const discordCopyIcon = reportsBox.querySelector('#ss-reports-discord-copy');
-            if (discordCopyIcon) {
-                let discordFadeTimer;
-                const copyDiscordLink = async () => {
-                    discordCopyIcon.style.opacity = '0.5';
-                    clearTimeout(discordFadeTimer);
-                    discordFadeTimer = setTimeout(() => { discordCopyIcon.style.opacity = '1'; }, 200);
-                    const value = 'https://discord.com/app';
-                    try {
-                        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
-                        await navigator.clipboard.writeText(value);
-                    } catch (_) {
-                        const input = document.createElement('textarea');
-                        input.value = value;
-                        input.style.position = 'fixed';
-                        input.style.opacity = '0';
-                        document.body.appendChild(input);
-                        input.select();
-                        document.execCommand('copy');
-                        input.remove();
-                    }
-                };
-                discordCopyIcon.addEventListener('click', copyDiscordLink);
-                discordCopyIcon.addEventListener('keydown', event => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        copyDiscordLink();
-                    }
-                });
-            }
+            ensureReportsDiscordIcon(reportsBox);
 
             document.getElementById('ss-refresh-trigger').addEventListener('click', () => {
                 const icon = document.getElementById('ss-refresh-icon');
