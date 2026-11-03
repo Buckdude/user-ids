@@ -5,7 +5,5 @@
   "GITHUB_KNOWN_CHEATER_NAMES_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/main/known%20cheater",
   "GITHUB_BOTS_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/bots",
   "GITHUB_TOXIC_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/main/toxic",
-  "GITHUB_BWD_MEMBER_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/bwd.member",
-  "GITHUB_STAFF_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/staff",
-  "GITHUB_PRIVATE_TAGS_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/main/users.json"
+  "GITHUB_BWD_MEMBER_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/bwd.member"
 }
