@@ -41,7 +41,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         return originalCount;
     }
 
-    const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/links.';
+    const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/links';
     const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
     let GITHUB_USER_TAGS_URL = '';
     let GITHUB_WHITELIST_URL = '';
