@@ -689,7 +689,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                         if (match) {
                             const name = match[1].trim();
                             const pid = match[2];
-                            if (WHITELISTED_PLAYER_IDS.has(pid) || hasGithubRole(pid, 'eggforcer')) continue;
+                            if (WHITELISTED_PLAYER_IDS.has(pid) || hasGithubRole(pid, '')) continue;
                             const reporter = match[3].trim();
                             const reason = match[4].trim();
                             const remainder = (match[5] || "").trim();
