@@ -998,7 +998,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         #custom-reports-panel .ss-report-server-code { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--ss-report-unit)) !important; font-family: inherit !important; line-height: inherit !important; font-weight: inherit !important; }
         #custom-reports-panel .ss-report-recent-badge {
             flex: 0 0 auto; white-space: nowrap;
-            font-size: calc(9.35 * var(--ss-report-unit)) !important;
             padding: calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;
             border-radius: calc(5 * var(--ss-report-unit)) !important;
         }
