@@ -920,7 +920,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         .ss-report-tag-nametag { color: #fff !important; background: #0c576f !important; }
         .ss-report-tag-wizard { color: #fff !important; background: #3498db !important; }
         #custom-reports-panel .ss-report-log-tags { flex-wrap: wrap; }
-        #reportInfoPopup .ss-report-user-tags .ss-report-tag {
+        #reportInfoPopup .ss-report-user-tags .ss-report-tag,
+        #reportInfoPopup #report_popup_recent {
             display: inline-block; color: #fff !important; font-size: 0.7em;
             font-weight: 900; line-height: 1.2; padding: 2px 8px; border-radius: 5px;
         }
@@ -1101,7 +1102,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     <button class="roundme_sm popup_close clickme" id="closeReportPopupBtn">
                         <i class="fas fa-times text_white fa-2x"></i>
                     </button>
-                    <p id="report_popup_recent" style="text-align: center; font-size: 13px; font-weight: 400; color: #fff; padding: 1px 6px; border-radius: 5px; line-height: 1.2; width: fit-content; margin: 4px auto 8px; display: none;"></p>
+                    <p id="report_popup_recent" style="text-align: center; color: #fff; width: fit-content; margin: 4px auto 8px; display: none;"></p>
                     <div id="report_popup_user_tags" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px;">
                         <span id="report_popup_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
                         <span id="report_popup_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
@@ -1505,8 +1506,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     recentEl.innerText = `${recentCount} RECENT REPORT${recentCount === 1 ? '' : 'S'}`;
                     recentEl.style.color = '#fff';
                     recentEl.style.backgroundColor = recentCount >= 10 ? '#000000' : recentCount >= 5 ? '#900100' : recentCount >= 3 ? '#cc0000' : recentCount === 2 ? '#f79520' : '#ffe600';
-                    recentEl.style.fontWeight = '700';
-                    recentEl.style.fontSize = '13px';
                 }
                 time.innerText = report.time;
                 playerId.textContent = report.pid;
