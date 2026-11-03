@@ -1,0 +1,1678 @@
+globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest, quickEmojis, resolvedEmojis) {
+    'use strict';
+
+    const CHANNEL_ID = "1126624154515406948";
+
+    let lastUpdateTime = Date.now();
+    window.currentSelectedReport = null;
+    let successFadeTimeout = null;
+    const reactionCache = {};
+    const reactionConfirmed = {};
+    const reactionPending = new Set();
+    let reportsArray = [];
+    let reportsView = 'reports';
+    const REPORT_SESSION_KEY = `ss-live-reports-${CHANNEL_ID}-temporary-state`;
+    function loadTemporaryReportState() {
+        try {
+            const state = JSON.parse(sessionStorage.getItem(REPORT_SESSION_KEY) || '{}');
+            return state && typeof state === 'object' ? state : {};
+        } catch (e) {
+            return {};
+        }
+    }
+    const temporaryReportState = loadTemporaryReportState();
+    const recentReportCounts = new Map(
+        Object.entries(temporaryReportState.recentCounts || {}).filter(([, count]) =>
+            /^\d+$/.test(String(count)))
+    );
+    function saveTemporaryReportState() {
+        try {
+            sessionStorage.setItem(REPORT_SESSION_KEY, JSON.stringify({
+                recentCounts: Object.fromEntries(recentReportCounts)
+            }));
+        } catch (e) {
+        }
+    }
+    function getOriginalRecentReportCount(messageId, count) {
+        if (recentReportCounts.has(messageId)) return recentReportCounts.get(messageId);
+        const originalCount = String(count);
+        recentReportCounts.set(messageId, originalCount);
+        saveTemporaryReportState();
+        return originalCount;
+    }
+
+    const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/admin';
+    const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
+    const GITHUB_REFRESH_MS = 15000;
+    const GITHUB_MODERATION_REFRESH_MS = 30000;
+    let GITHUB_USER_TAGS_URL = '';
+    let GITHUB_WHITELIST_URL = '';
+    let GITHUB_CHEATER_IDS_URL = '';
+    let GITHUB_KNOWN_CHEATER_NAMES_URL = '';
+    let GITHUB_BOTS_URL = '';
+    let GITHUB_TOXIC_URL = '';
+    let GITHUB_BWD_MEMBER_URL = '';
+    let githubLinkHubLoading = false;
+    let githubPrivateMode = false;
+    let githubStaffWarningShown = false;
+    let githubLinksWarningShown = false;
+    let lastModerationRefresh = 0;
+    let lastTagRefresh = 0;
+
+    const WHITELISTED_PLAYER_IDS = new Set();
+    const KNOWN_CHEATER_NAMES = new Set();
+    const KNOWN_CHEATER_PLAYER_IDS = new Set();
+    const BOT_NAMES = new Set();
+    const TOXIC_NAMES = new Set();
+    const TOXIC_PLAYER_IDS = new Set();
+    const GITHUB_BWD_MEMBER_IDS = new Set();
+    let moderationRequestGeneration = 0;
+
+    function loadGitHubModerationTextList(url, targetSet, numericIds, listName) {
+        if (!/^https:\/\//i.test(url)) return;
+        const generation = moderationRequestGeneration;
+        const urlWithRefresh = `${url}${url.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: urlWithRefresh,
+            timeout: 15000,
+            onload: response => {
+                if (generation !== moderationRequestGeneration) return;
+                if (response.status !== 200) {
+                    console.warn(`[Reports] ${listName}: HTTP ${response.status}`);
+                    return;
+                }
+                const next = new Set();
+                for (const rawLine of String(response.responseText ?? '').split(/\r?\n/)) {
+                    const line = rawLine.trim();
+                    if (!line || line.startsWith('#')) continue;
+                    if (numericIds && !/^\d+$/.test(line)) {
+                        console.warn(`[Reports] Invalid ${listName} ID:`, line);
+                        continue;
+                    }
+                    next.add(numericIds ? line : line.toLowerCase());
+                }
+                targetSet.clear();
+                for (const entry of next) targetSet.add(entry);
+                renderReportsList(reportsArray);
+                refreshOpenPopupGithubTags();
+            },
+            onerror: () => console.warn(`[Reports] ${listName} failed`),
+            ontimeout: () => console.warn(`[Reports] ${listName} timeout`)
+        });
+    }
+
+    function refreshOpenPopupModerationTags() {
+        const overlay = document.getElementById('reportPopupOverlay');
+        const report = window.currentSelectedReport;
+        if (!overlay || overlay.style.display === 'none' || !report) return;
+        const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
+        const reporterName = reporterMatch ? reporterMatch[1].trim() : report.reporter;
+        const reporterId = reporterMatch ? reporterMatch[2] : '';
+        for (const [prefix, name, pid] of [
+            ['report_popup_', report.name, report.pid],
+            ['report_popup_reporter_', reporterName, reporterId]
+        ]) {
+            const label = overlay.querySelector(`#${prefix}cheater_label`);
+            const toxicLabel = overlay.querySelector(`#${prefix}toxic_label`);
+            const botLabel = overlay.querySelector(`#${prefix}bot_label`);
+            const tagsEl = overlay.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
+            const nameLabel = getReportNameLabel(name, pid);
+            const isCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
+            if (label) {
+                label.style.display = isCheater ? 'inline-block' : 'none';
+                if (isCheater) label.textContent = nameLabel;
+            }
+            if (toxicLabel) toxicLabel.style.display = isToxicPlayer(name, pid) ? 'inline-block' : 'none';
+            if (botLabel) botLabel.style.display = isBotPlayer(name) ? 'inline-block' : 'none';
+            orderPopupReportTags(tagsEl, pid);
+            if (tagsEl) tagsEl.style.display = Array.from(tagsEl.children).some(child => child.style.display !== 'none') ? 'flex' : 'none';
+        }
+    }
+
+    function loadGitHubToxicList() {
+        if (!/^https:\/\//i.test(GITHUB_TOXIC_URL)) return;
+        const generation = moderationRequestGeneration;
+        const urlWithRefresh = `${GITHUB_TOXIC_URL}${GITHUB_TOXIC_URL.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: urlWithRefresh,
+            timeout: 15000,
+            onload: response => {
+                if (generation !== moderationRequestGeneration) return;
+                if (response.status !== 200) {
+                    console.warn(`[Reports] toxic: HTTP ${response.status}`);
+                    return;
+                }
+                const nextNames = new Set();
+                const nextIds = new Set();
+                let section = null;
+                for (const rawLine of String(response.responseText ?? '').split(/\r?\n/)) {
+                    const entry = rawLine.trim();
+                    if (!entry || entry.startsWith('#')) continue;
+                    if (/^\[ids\]$/i.test(entry)) {
+                        section = 'ids';
+                        continue;
+                    }
+                    if (/^\[usernames\]$/i.test(entry)) {
+                        section = 'usernames';
+                        continue;
+                    }
+                    if (/^\[[^\]]+\]$/.test(entry)) {
+                        console.warn('[Reports] Invalid toxic section:', entry);
+                        section = 'unknown';
+                        continue;
+                    }
+                    if (section === 'unknown') continue;
+                    if (section === 'usernames') {
+                        nextNames.add(entry.toLowerCase());
+                    } else if (section === 'ids') {
+                        if (/^\d+$/.test(entry)) nextIds.add(entry);
+                        else console.warn('[Reports] Invalid toxic ID:', entry);
+                    } else {
+                        if (/^\d+$/.test(entry)) nextIds.add(entry);
+                        else nextNames.add(entry.toLowerCase());
+                    }
+                }
+                TOXIC_NAMES.clear();
+                TOXIC_PLAYER_IDS.clear();
+                for (const name of nextNames) TOXIC_NAMES.add(name);
+                for (const id of nextIds) TOXIC_PLAYER_IDS.add(id);
+                renderReportsList(reportsArray);
+                refreshOpenPopupModerationTags();
+            },
+            onerror: () => console.warn('[Reports] toxic failed'),
+            ontimeout: () => console.warn('[Reports] toxic timeout')
+        });
+    }
+
+    function loadGitHubModerationLists() {
+        moderationRequestGeneration++;
+        loadGitHubModerationTextList(GITHUB_WHITELIST_URL, WHITELISTED_PLAYER_IDS, true, 'whitelist');
+        loadGitHubModerationTextList(GITHUB_CHEATER_IDS_URL, KNOWN_CHEATER_PLAYER_IDS, true, 'cheater IDs');
+        loadGitHubModerationTextList(GITHUB_KNOWN_CHEATER_NAMES_URL, KNOWN_CHEATER_NAMES, false, 'known cheater names');
+        loadGitHubModerationTextList(GITHUB_BOTS_URL, BOT_NAMES, false, 'bot names');
+        loadGitHubModerationTextList(GITHUB_BWD_MEMBER_URL, GITHUB_BWD_MEMBER_IDS, true, 'BWD member IDs');
+        loadGitHubToxicList();
+    }
+
+    let githubPlayerTags = new Map();
+    let lastGithubTagUpdate = 0;
+    let githubTagsLoading = false;
+    let githubTagsLoadingUrl = '';
+    const getGithubTagsCacheKey = () => 'ss-live-reports-tag-data:' + encodeURIComponent(GITHUB_USER_TAGS_URL);
+    let githubNameTagsEnabled = false;
+
+    function getGithubPlayer(playerId) {
+        return githubPlayerTags.get(String(playerId ?? '').trim()) || null;
+    }
+
+    function applyGithubPlayerTags(data) {
+        if (!data || !data.players || typeof data.players !== 'object' || Array.isArray(data.players)) {
+            throw new Error('Expected a JSON object with a "players" field');
+        }
+        const next = new Map();
+        for (const [pid, entry] of Object.entries(data.players)) {
+            if (!/^\d+$/.test(pid) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+            const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+            const nickname = typeof entry.nickname === 'string' ? entry.nickname.trim() : '';
+            const tags = Array.isArray(entry.tags)
+                ? entry.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim().toLowerCase()).filter(Boolean)
+                : [];
+            if (!name && !nickname && tags.length === 0) continue;
+            next.set(pid, { name, nickname, tags });
+        }
+        githubNameTagsEnabled = Array.from(next.values()).some(entry => !!(entry.name || entry.nickname));
+        githubPlayerTags = next;
+        lastGithubTagUpdate = Date.now();
+        renderReportsList(reportsArray);
+        refreshOpenPopupGithubTags();
+    }
+
+    function restoreGithubTagsForCurrentUrl() {
+        if (!GITHUB_USER_TAGS_URL) return;
+        try {
+            const stored = GM_getValue(getGithubTagsCacheKey(), '');
+            if (stored) applyGithubPlayerTags(JSON.parse(stored));
+        } catch (error) {
+            console.warn('[Reports] Tag cache invalid:', error);
+        }
+    }
+
+    function getGithubNameTag(playerId) {
+        if (!githubNameTagsEnabled) return '';
+        const entry = getGithubPlayer(playerId);
+        return entry ? (entry.nickname || entry.name || '') : '';
+    }
+
+    function hasGithubRole(playerId, role) {
+        const entry = getGithubPlayer(playerId);
+        if (!entry) return false;
+        if (role === 'cc') return entry.tags.includes('cc') || entry.tags.includes('creator') || entry.tags.includes('content creator');
+        if (role === 'member') return entry.tags.includes('member') || entry.tags.includes('bwd member');
+        return entry.tags.includes(role);
+    }
+
+    function isWizardPlayer(playerId) {
+        return hasGithubRole(playerId, 'wizard') ||
+            hasGithubRole(playerId, 'developer') ||
+            hasGithubRole(playerId, 'dev');
+    }
+
+    function getOrderedReportTagKeys(playerId) {
+        const order = [];
+        const knownKeys = new Set(['wizard', 'eggforcer', 'cc', 'member', 'cheater', 'toxic', 'bot']);
+        const aliases = {
+            'creator': 'cc', 'content creator': 'cc',
+            'bwd member': 'member', 'bwd_member': 'member',
+            'developer': 'wizard', 'dev': 'wizard'
+        };
+        function add(tag) {
+            const normalized = String(tag ?? '').trim().toLowerCase();
+            const key = aliases[normalized] || normalized;
+            if (knownKeys.has(key) && !order.includes(key)) order.push(key);
+        }
+        const entry = getGithubPlayer(playerId);
+        if (entry && Array.isArray(entry.tags)) entry.tags.forEach(add);
+        ['cheater', 'bot', 'toxic', 'wizard', 'eggforcer', 'cc', 'member'].forEach(add);
+        order.splice(order.indexOf('toxic'), 1);
+        order.unshift('toxic');
+        return order;
+    }
+
+    function orderPopupReportTags(tagsElement, playerId) {
+        if (!tagsElement) return;
+        const order = getOrderedReportTagKeys(playerId);
+        const suffixToKey = {
+            eggforcer_label: 'eggforcer',
+            creator_label: 'cc', member_label: 'member', wizard_label: 'wizard',
+            cheater_label: 'cheater', toxic_label: 'toxic', bot_label: 'bot'
+        };
+        const children = Array.from(tagsElement.children);
+        const keyOf = element => {
+            const suffix = Object.keys(suffixToKey).find(s => element.id.endsWith(s));
+            return suffix ? suffixToKey[suffix] : '';
+        };
+        children.sort((a, b) => order.indexOf(keyOf(a)) - order.indexOf(keyOf(b)));
+        children.forEach(element => tagsElement.appendChild(element));
+    }
+
+    function escapeGithubTag(value) {
+        return String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+    }
+
+    function parseGithubUsersPayload(raw) {
+        const source = String(raw ?? '');
+        try {
+            return { data: JSON.parse(source), recovered: false };
+        } catch (parseError) {
+            if (!/"players"\s*:\s*\{/.test(source)) throw parseError;
+            const corrected = source.replace(/(\r?\n[ \t]*)\]([ \t]*\r?\n[ \t]*\}[ \t]*)$/, '$1}$2');
+            if (corrected === source) throw parseError;
+            const data = JSON.parse(corrected);
+            if (!data || !data.players || typeof data.players !== 'object' || Array.isArray(data.players)) throw parseError;
+            console.warn('[Reports] Corrected JSON bracket.');
+            return { data, recovered: true };
+        }
+    }
+
+    function loadGithubPlayerTags() {
+        if (!GITHUB_USER_TAGS_URL || (githubTagsLoading && githubTagsLoadingUrl === GITHUB_USER_TAGS_URL)) return;
+        githubTagsLoading = true;
+        const requestedTagUrl = GITHUB_USER_TAGS_URL;
+        githubTagsLoadingUrl = requestedTagUrl;
+        const url = `${requestedTagUrl}${requestedTagUrl.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
+
+        function acceptResponse(raw) {
+            if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+            const { data } = parseGithubUsersPayload(raw);
+            applyGithubPlayerTags(data);
+            const cachedPlayers = {};
+            for (const [id, entry] of githubPlayerTags) cachedPlayers[id] = entry;
+            try { GM_setValue(getGithubTagsCacheKey(), JSON.stringify({ players: cachedPlayers })); }
+            catch (error) {}
+            githubTagsLoading = false;
+        }
+
+        function tryBrowserFetch(reason) {
+            if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+            if (typeof fetch !== 'function') {
+                failLoad(reason + '; browser fetch unavailable');
+                return;
+            }
+            fetch(url, { cache: 'no-store' })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.text();
+                })
+                .then(raw => acceptResponse(raw))
+                .catch(error => failLoad(`${reason}; fallback: ${error.message || error}`));
+        }
+
+        function failLoad(reason) {
+            if (GITHUB_USER_TAGS_URL !== requestedTagUrl) return;
+            githubTagsLoading = false;
+            console.error('[Reports] Tags failed:', reason);
+        }
+
+        try {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                timeout: 15000,
+                onload: response => {
+                    if (response.status !== 200) {
+                        tryBrowserFetch(`GM request HTTP ${response.status}`);
+                        return;
+                    }
+                    try {
+                        acceptResponse(String(response.responseText ?? response.response ?? ''));
+                    } catch (error) {
+                        tryBrowserFetch(`GM response error: ${error.message || error}`);
+                    }
+                },
+                onerror: () => tryBrowserFetch('Tampermonkey request blocked or failed'),
+                ontimeout: () => tryBrowserFetch('Tampermonkey request timed out')
+            });
+        } catch (error) {
+            tryBrowserFetch(`Tampermonkey request exception: ${error.message || error}`);
+        }
+    }
+
+    function refreshOpenPopupGithubTags() {
+        const overlay = document.getElementById('reportPopupOverlay');
+        const report = window.currentSelectedReport;
+        if (!overlay || overlay.style.display === 'none' || !report) return;
+        const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
+        const reporterId = reporterMatch ? reporterMatch[2] : '';
+        for (const [prefix, pid] of [
+            ['report_popup_', report.pid],
+            ['report_popup_reporter_', reporterId]
+        ]) {
+            const nameLabel = overlay.querySelector(`#${prefix}name_label`);
+            const tagsEl = overlay.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
+            if (!nameLabel || !tagsEl) continue;
+            const displayName = getGithubNameTag(pid);
+            nameLabel.textContent = displayName;
+            nameLabel.style.display = displayName ? 'inline-block' : 'none';
+            if (prefix === 'report_popup_' || prefix === 'report_popup_reporter_') {
+                const wrapId = prefix === 'report_popup_' ? 'report_popup_name_tag_wrap' : 'report_popup_reporter_name_tag_wrap';
+                const nameTagWrap = overlay.querySelector(`#${wrapId}`);
+                if (nameTagWrap) nameTagWrap.style.display = displayName ? 'flex' : 'none';
+            }
+            const roles = {
+                creator_label: hasGithubRole(pid, 'cc'),
+                member_label: isBwdMemberPlayer(pid),
+                eggforcer_label: hasGithubRole(pid, 'eggforcer'),
+                wizard_label: isWizardPlayer(pid)
+            };
+            for (const [suffix, enabled] of Object.entries(roles)) {
+                const label = overlay.querySelector(`#${prefix}${suffix}`);
+                if (label) label.style.display = enabled ? 'inline-block' : 'none';
+            }
+            orderPopupReportTags(tagsEl, pid);
+            tagsEl.style.display = Array.from(tagsEl.children).some(child => child.style.display !== 'none') ? 'flex' : 'none';
+        }
+        refreshOpenPopupModerationTags();
+    }
+    const HUB_REQUIRED_LINK_KEYS = [
+        'GITHUB_USER_TAGS_URL', 'GITHUB_WHITELIST_URL',
+        'GITHUB_CHEATER_IDS_URL', 'GITHUB_KNOWN_CHEATER_NAMES_URL',
+        'GITHUB_BOTS_URL', 'GITHUB_TOXIC_URL', 'GITHUB_BWD_MEMBER_URL'
+    ];
+    function validatedGithubLinkHub(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid links JSON');
+        for (const key of HUB_REQUIRED_LINK_KEYS) {
+            if (!isGithubRawUrl(value[key])) throw new Error(`Invalid link: ${key}`);
+        }
+        for (const key of ['GITHUB_STAFF_URL', 'GITHUB_PRIVATE_TAGS_URL']) {
+            if (value[key] && !isGithubRawUrl(value[key])) throw new Error(`Invalid link: ${key}`);
+        }
+        return value;
+    }
+    function isGithubRawUrl(url) {
+        if (typeof url !== 'string') return false;
+        try {
+            const parsed = new URL(url);
+            return parsed.protocol === 'https:' && parsed.hostname === 'raw.githubusercontent.com';
+        } catch (_) { return false; }
+    }
+    function readGithubHubText(url) {
+        return new Promise((resolve, reject) => {
+            const refreshed = `${url}${url.includes('?') ? '&' : '?'}refresh=${Date.now()}`;
+            function browserFallback(reason) {
+                if (typeof fetch !== 'function') { reject(new Error(reason)); return; }
+                fetch(refreshed, { cache: 'no-store' }).then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.text();
+                }).then(resolve).catch(error => reject(new Error(`${reason}; ${error.message || error}`)));
+            }
+            try {
+                GM_xmlhttpRequest({
+                    method: 'GET', url: refreshed, timeout: 12000,
+                    onload: response => response.status === 200
+                        ? resolve(String(response.responseText ?? response.response ?? ''))
+                        : response.status === 404
+                            ? reject(new Error('HTTP 404'))
+                            : browserFallback(`HTTP ${response.status}`),
+                    onerror: () => browserFallback('GitHub request failed'),
+                    ontimeout: () => browserFallback('GitHub request timed out')
+                });
+            } catch (error) { browserFallback(error.message || String(error)); }
+        });
+    }
+    function useGithubLinkHub(links, privateMode, force = false) {
+        const userTagUrl = privateMode && links.GITHUB_PRIVATE_TAGS_URL
+            ? links.GITHUB_PRIVATE_TAGS_URL : links.GITHUB_USER_TAGS_URL;
+        const tagUrlChanged = GITHUB_USER_TAGS_URL !== userTagUrl;
+        const moderationUrlChanged = [
+            GITHUB_WHITELIST_URL !== links.GITHUB_WHITELIST_URL,
+            GITHUB_CHEATER_IDS_URL !== links.GITHUB_CHEATER_IDS_URL,
+            GITHUB_KNOWN_CHEATER_NAMES_URL !== links.GITHUB_KNOWN_CHEATER_NAMES_URL,
+            GITHUB_BOTS_URL !== links.GITHUB_BOTS_URL,
+            GITHUB_TOXIC_URL !== links.GITHUB_TOXIC_URL,
+            GITHUB_BWD_MEMBER_URL !== links.GITHUB_BWD_MEMBER_URL
+        ].some(Boolean);
+        GITHUB_USER_TAGS_URL = userTagUrl;
+        GITHUB_WHITELIST_URL = links.GITHUB_WHITELIST_URL;
+        GITHUB_CHEATER_IDS_URL = links.GITHUB_CHEATER_IDS_URL;
+        GITHUB_KNOWN_CHEATER_NAMES_URL = links.GITHUB_KNOWN_CHEATER_NAMES_URL;
+        GITHUB_BOTS_URL = links.GITHUB_BOTS_URL;
+        GITHUB_TOXIC_URL = links.GITHUB_TOXIC_URL;
+        GITHUB_BWD_MEMBER_URL = links.GITHUB_BWD_MEMBER_URL;
+        if (tagUrlChanged) {
+            githubTagsLoading = false;
+            githubPlayerTags = new Map();
+            githubNameTagsEnabled = false;
+            lastGithubTagUpdate = 0;
+            restoreGithubTagsForCurrentUrl();
+            renderReportsList(reportsArray);
+            refreshOpenPopupGithubTags();
+        }
+        const now = Date.now();
+        if (force || moderationUrlChanged || now - lastModerationRefresh >= GITHUB_MODERATION_REFRESH_MS) {
+            lastModerationRefresh = now;
+            loadGitHubModerationLists();
+        }
+        if (force || tagUrlChanged || now - lastTagRefresh >= GITHUB_REFRESH_MS) {
+            lastTagRefresh = now;
+            loadGithubPlayerTags();
+        }
+    }
+    async function loadGithubLinkHub(force = false) {
+        if (githubLinkHubLoading) return;
+        githubLinkHubLoading = true;
+        try {
+            let links;
+            try {
+                links = validatedGithubLinkHub(JSON.parse(await readGithubHubText(GITHUB_LINKS_URL)));
+                githubLinksWarningShown = false;
+                try { GM_setValue(GITHUB_LINKS_CACHE_KEY, JSON.stringify(links)); } catch (_) {}
+            } catch (error) {
+                if (!githubLinksWarningShown) console.warn('[Reports] Links unavailable:', error.message || error);
+                githubLinksWarningShown = true;
+                try {
+                    const cached = GM_getValue(GITHUB_LINKS_CACHE_KEY, '');
+                    if (cached) links = validatedGithubLinkHub(JSON.parse(cached));
+                } catch (_) {}
+            }
+            if (!links) {
+                console.error('[Reports] Links missing.');
+                return;
+            }
+            useGithubLinkHub(links, githubPrivateMode, force);
+            let nextPrivateMode = false;
+            if (links.GITHUB_STAFF_URL) {
+                try {
+                    const staffText = await readGithubHubText(links.GITHUB_STAFF_URL);
+                    nextPrivateMode = staffText.trim().toLowerCase() === 'private';
+                    githubStaffWarningShown = false;
+                } catch (_) {
+                    if (!githubStaffWarningShown) console.warn('[Reports] Staff unavailable; public tags active.');
+                    githubStaffWarningShown = true;
+                }
+            }
+            if (githubPrivateMode !== nextPrivateMode) {
+                githubPrivateMode = nextPrivateMode;
+                useGithubLinkHub(links, githubPrivateMode, force);
+            }
+        } finally {
+            githubLinkHubLoading = false;
+        }
+    }
+    loadGithubLinkHub();
+    setInterval(loadGithubLinkHub, GITHUB_REFRESH_MS);
+
+    const normalizeReportName = name => String(name ?? '').trim().toLowerCase();
+    const normalizeBotName = name => normalizeReportName(name)
+        .replace(/[86]/g, 'b').replace(/0/g, 'o')
+        .replace(/[7+]/g, 't').replace(/3/g, 'e')
+        .replace(/[4@]/g, 'a').replace(/2/g, 'z')
+        .replace(/[<(]/g, 'c').replace(/[1!|]/g, 'l')
+        .replace(/[5$]/g, 's').replace(/[^a-z]/g, '');
+
+    function botNameDistance(a, b) {
+        const d = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+        for (let i = 0; i <= a.length; i++) d[i][0] = i;
+        for (let j = 0; j <= b.length; j++) d[0][j] = j;
+        for (let i = 1; i <= a.length; i++) {
+            for (let j = 1; j <= b.length; j++) {
+                d[i][j] = Math.min(
+                    d[i - 1][j] + 1,
+                    d[i][j - 1] + 1,
+                    d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                );
+                if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+                    d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+                }
+            }
+        }
+        return d[a.length][b.length];
+    }
+
+    function isBotPlayer(name) {
+        const normalized = normalizeBotName(name);
+        return normalized.length >= 6 && Array.from(BOT_NAMES).some(bot => {
+            const target = normalizeBotName(bot);
+            return target.length >= 6 && botNameDistance(normalized, target) <= Math.ceil(target.length * 0.25);
+        });
+    }
+
+    function getReportNameLabel(name, playerId) {
+        if (KNOWN_CHEATER_NAMES.has(normalizeReportName(name))) return 'KNOWN CHEATER';
+        if (KNOWN_CHEATER_PLAYER_IDS.has(String(playerId))) return 'CHEATER';
+        return isBotPlayer(name) ? 'Bot' : null;
+    }
+
+    function isToxicPlayer(name, playerId) {
+        return TOXIC_NAMES.has(normalizeReportName(name)) ||
+            TOXIC_PLAYER_IDS.has(String(playerId)) ||
+            hasGithubRole(playerId, 'toxic');
+    }
+
+    function isBwdMemberPlayer(playerId) {
+        return GITHUB_BWD_MEMBER_IDS.has(String(playerId)) || hasGithubRole(playerId, 'member');
+    }
+
+    function getActionTakenReactionIndicators(report) {
+        const indicators = [];
+        const seenQuickEmojis = new Set();
+        (report.reactions || []).forEach(reaction => {
+            if (!reaction.emoji) return;
+            const otherReacted = reaction.count > (reaction.me ? 1 : 0);
+            if (otherReacted) indicators.push({ ...reaction, mine: false });
+
+            const discordEmoji = reaction.emojiId ? `${reaction.emoji}:${reaction.emojiId}` : reaction.emoji;
+            const cacheKey = `${report.id}-${encodeURIComponent(discordEmoji)}`;
+            const mine = (cacheKey in reactionCache) ? !!reactionCache[cacheKey] : !!reaction.me;
+            if (mine) indicators.push({ ...reaction, mine: true });
+            if (!reaction.emojiId && quickEmojis.includes(reaction.emoji)) {
+                seenQuickEmojis.add(reaction.emoji);
+            }
+        });
+        quickEmojis.forEach(emoji => {
+            if (seenQuickEmojis.has(emoji)) return;
+            if (reactionCache[`${report.id}-${encodeURIComponent(emoji)}`]) {
+                indicators.push({ emoji, mine: true });
+            }
+        });
+        return indicators;
+    }
+
+    function isActionTaken(report) {
+        const reactions = report.reactions || [];
+        const someoneElseReacted = reactions.some(reaction => reaction.count > (reaction.me ? 1 : 0));
+        const myOtherReaction = reactions.some(reaction => reaction.me && !quickEmojis.includes(reaction.emoji));
+        const myQuickReaction = quickEmojis.some(emoji => {
+            const key = `${report.id}-${encodeURIComponent(emoji)}`;
+            return (key in reactionCache) ? !!reactionCache[key] : reactions.some(r => r.emoji === emoji && r.me);
+        });
+        return someoneElseReacted || myOtherReaction || myQuickReaction;
+    }
+
+    function hasResolvingReaction(report) {
+        return resolvedEmojis.some(emoji => {
+            const key = `${report.id}-${encodeURIComponent(emoji)}`;
+            const reaction = (report.reactions || []).find(item => item.emoji === emoji);
+            const fromAnotherMod = !!reaction && reaction.count > (reaction.me ? 1 : 0);
+            const fromMe = (key in reactionCache) ? !!reactionCache[key] : !!reaction?.me;
+            return fromAnotherMod || fromMe;
+        });
+    }
+
+    function isEarlierOrSameReport(report, actedReport) {
+        const count = Number(report.recentReports);
+        const actedCount = Number(actedReport.recentReports);
+        if (Number.isFinite(count) && count > 0 &&
+            Number.isFinite(actedCount) && actedCount > 0 && count !== actedCount) {
+            return count < actedCount;
+        }
+        if (Number.isFinite(report.createdAt) && Number.isFinite(actedReport.createdAt)) {
+            if (report.createdAt !== actedReport.createdAt) return report.createdAt < actedReport.createdAt;
+        }
+        try {
+            return BigInt(report.id) <= BigInt(actedReport.id);
+        } catch (e) {
+            return report.id === actedReport.id;
+        }
+    }
+
+    function getVisibleReports(reports, view) {
+        if (view === 'action') return reports.filter(isActionTaken);
+
+        const resolvedByPlayer = new Map();
+        for (const report of reports) {
+            if (!hasResolvingReaction(report)) continue;
+            if (!resolvedByPlayer.has(report.pid)) resolvedByPlayer.set(report.pid, []);
+            resolvedByPlayer.get(report.pid).push(report);
+        }
+        return reports.filter(report => {
+            if (isActionTaken(report)) return false;
+            const resolvingReports = resolvedByPlayer.get(report.pid) || [];
+            return !resolvingReports.some(actedReport => isEarlierOrSameReport(report, actedReport));
+        });
+    }
+
+    function requestAPI(method, url) {
+        return discordRequest(method, url);
+    }
+
+
+    async function fetchDiscordReports() {
+        const url = `https://discord.com/api/v9/channels/${CHANNEL_ID}/messages?limit=15`;
+        const placeholder = document.getElementById('ss-reports-placeholder');
+
+        try {
+            const res = await requestAPI("GET", url);
+
+            if (res.status !== 200) {
+                if (placeholder) {
+                    if (res.status === 401) placeholder.innerText = "Error 401: Invalid Token.";
+                    else if (res.status === 403) placeholder.innerText = "Error 403: No access.";
+                    else placeholder.innerText = `Error: ${res.status}`;
+                    placeholder.style.color = "#cc0000";
+                }
+                return;
+            }
+
+            const messages = JSON.parse(res.responseText);
+            let parsedReports = [];
+
+            for (let msg of messages) {
+                (msg.reactions || []).forEach(reaction => {
+                    if (!reaction.emoji || !reaction.emoji.name) return;
+                    const emoji = reaction.emoji.id ? `${reaction.emoji.name}:${reaction.emoji.id}` : reaction.emoji.name;
+                    const key = `${msg.id}-${encodeURIComponent(emoji)}`;
+                    if (!(key in reactionCache)) reactionCache[key] = !!reaction.me;
+                    if (!(key in reactionConfirmed)) reactionConfirmed[key] = !!reaction.me;
+                });
+                let fullText = msg.content + "\n";
+                if (msg.embeds && msg.embeds.length > 0) {
+                    msg.embeds.forEach(embed => {
+                        fullText += (embed.title || "") + "\n" + (embed.description || "") + "\n" + (embed.url || "") + "\n";
+                    });
+                }
+                if (msg.components) fullText += JSON.stringify(msg.components) + "\n";
+
+                const rrMatch = fullText.match(/(\d+)\s+recent reports/i);
+                const recentReportsCount = getOriginalRecentReportCount(msg.id, rrMatch ? rrMatch[1] : "0");
+
+                const lines = fullText.split(/\n|\\n/);
+                for (let line of lines) {
+                    let cleanLine = line.replace(/[*_~`]/g, '').trim();
+                    const match = cleanLine.match(/(.+?)\s*\[(\d+)\]\s*reported by:\s*(.+?\[\d+\])\s*for:\s*(.+?)(?:\s*-\s*(.*))?$/i);
+
+                    if (match) {
+                        const name = match[1].trim();
+                        const pid = match[2];
+                        if (WHITELISTED_PLAYER_IDS.has(pid) || hasGithubRole(pid, 'eggforcer')) continue;
+                        const reporter = match[3].trim();
+                        const reason = match[4].trim();
+                        const remainder = (match[5] || "").trim();
+
+                        let serverCode = "Unknown";
+                        let obsUrl = "";
+
+                        const urlRegex = /(https?:\/\/shellshock\.io[^\s\>\]\)"']+)/i;
+                        const urlMatch = remainder.match(urlRegex) || line.match(urlRegex) || fullText.match(urlRegex);
+                        if (urlMatch) obsUrl = urlMatch[1];
+
+                        if (obsUrl && obsUrl.includes('#')) {
+                            serverCode = obsUrl.split('#').pop();
+                        }
+                        if (serverCode === "Unknown" && remainder.includes('[')) {
+                            const mdMatch = remainder.match(/\[([^\]]+)\]/);
+                            if (mdMatch) serverCode = mdMatch[1];
+                        }
+                        if (serverCode === "Unknown") {
+                            const patternMatch = cleanLine.match(/([a-z]+-[a-z]+-[a-z]+)/i);
+                            if (patternMatch) serverCode = patternMatch[1];
+                        }
+
+                        serverCode = serverCode.replace(/[\>\]\)]/g, '').trim();
+                        if (!serverCode) serverCode = "Unknown";
+
+                        const dateObj = new Date(msg.timestamp);
+                        const timeFormatted = dateObj.toLocaleString('en-US', {
+                            month: 'long', day: 'numeric', year: 'numeric',
+                            hour: 'numeric', minute: '2-digit', hour12: true
+                        }).replace(' at ', ' at ');
+
+                        parsedReports.push({
+                            id: msg.id, name: name, pid: pid, reporter: reporter,
+                            reason: reason, server: serverCode, link: obsUrl,
+                            time: timeFormatted, createdAt: dateObj.getTime(), recentReports: recentReportsCount,
+                            reactions: (msg.reactions || []).map(reaction => ({
+                                emoji: reaction.emoji ? reaction.emoji.name : '',
+                                emojiId: reaction.emoji?.id || null,
+                                animated: !!reaction.emoji?.animated,
+                                count: Number(reaction.count) || 0,
+                                me: !!reaction.me
+                            }))
+                        });
+                    }
+                }
+                if (parsedReports.length >= 15) break;
+            }
+
+            const activeIds = new Set(parsedReports.map(report => report.id));
+            let countStateChanged = false;
+            for (const messageId of recentReportCounts.keys()) {
+                if (!activeIds.has(messageId)) {
+                    recentReportCounts.delete(messageId);
+                    countStateChanged = true;
+                }
+            }
+            if (countStateChanged) saveTemporaryReportState();
+
+            if (parsedReports.length === 0) {
+                if (reportsArray.length > 0) {
+                    reportsArray = [];
+                    lastUpdateTime = Date.now();
+                    renderReportsList(reportsArray);
+                    updateTimeText();
+                } else if (placeholder) {
+                    placeholder.innerHTML = `No valid reports found.`;
+                    placeholder.style.color = "#0c576f";
+                }
+                return;
+            }
+
+            if (JSON.stringify(parsedReports) !== JSON.stringify(reportsArray)) {
+                reportsArray = parsedReports;
+                lastUpdateTime = Date.now();
+                renderReportsList(reportsArray);
+                updateTimeText();
+            }
+
+            if (window.currentSelectedReport) {
+                const latestSelected = parsedReports.find(report => report.id === window.currentSelectedReport.id);
+                if (latestSelected) {
+                    window.currentSelectedReport = latestSelected;
+                    updateQuickReactionButtons(latestSelected.id);
+                }
+            }
+        } catch (e) {
+            if (placeholder) {
+                placeholder.innerText = "Network Error.";
+                placeholder.style.color = "#cc0000";
+            }
+        }
+    }
+
+    setInterval(fetchDiscordReports, 2500);
+
+    function updateQuickReactionButtons(messageId) {
+        const report = reportsArray.find(item => item.id === messageId) ||
+            (window.currentSelectedReport?.id === messageId ? window.currentSelectedReport : null);
+        document.querySelectorAll('.ss-quick-react').forEach(btn => {
+            const emoji = btn.getAttribute('data-emoji');
+            const myReaction = !!reactionCache[`${messageId}-${encodeURIComponent(emoji)}`];
+            const otherReaction = (report?.reactions || []).some(reaction =>
+                reaction.emoji === emoji && reaction.count > (reaction.me ? 1 : 0));
+            btn.style.opacity = myReaction ? '0.5' : '1';
+            btn.classList.toggle('ss-reacted-by-other', !myReaction && otherReaction);
+        });
+    }
+
+    async function sendReactionAPI(messageId, emojiStr) {
+        const encodedEmoji = encodeURIComponent(emojiStr);
+        const cacheKey = `${messageId}-${encodedEmoji}`;
+        const url = `https://discord.com/api/v9/channels/${CHANNEL_ID}/messages/${messageId}/reactions/${encodedEmoji}/@me`;
+
+        reactionCache[cacheKey] = !reactionCache[cacheKey];
+        if (window.currentSelectedReport && window.currentSelectedReport.id === messageId) updateQuickReactionButtons(messageId);
+        renderReportsList(reportsArray);
+        if (reactionPending.has(cacheKey)) return;
+        reactionPending.add(cacheKey);
+
+        const successMsg = document.getElementById('report_popup_success');
+        if (successMsg) {
+            if (successFadeTimeout) clearTimeout(successFadeTimeout);
+            successMsg.style.display = 'block';
+            successMsg.style.color = "#0c576f";
+            successMsg.innerText = "Processing...";
+            successMsg.style.opacity = '1';
+        }
+
+        function fadeReactionStatus() {
+            if (!successMsg) return;
+            if (successFadeTimeout) clearTimeout(successFadeTimeout);
+            successFadeTimeout = setTimeout(() => {
+                successMsg.style.opacity = '0';
+                setTimeout(() => {
+                    if (successMsg.style.opacity === '0') successMsg.style.display = 'none';
+                }, 220);
+            }, 2000);
+        }
+
+        try {
+            while (!!reactionCache[cacheKey] !== !!reactionConfirmed[cacheKey]) {
+                const isPressed = !!reactionConfirmed[cacheKey];
+                const method = isPressed ? 'DELETE' : 'PUT';
+                const res = await requestAPI(method, url);
+                if (res.status === 204 || res.status === 200) {
+                    reactionConfirmed[cacheKey] = !isPressed;
+                    if (successMsg) {
+                        successMsg.innerText = isPressed ? "Reaction removed!" : "Reaction sent!";
+                        successMsg.style.color = isPressed ? "#cc0000" : "#048607";
+                        fadeReactionStatus();
+                    }
+                } else {
+                    reactionCache[cacheKey] = !!reactionConfirmed[cacheKey];
+                    if (window.currentSelectedReport && window.currentSelectedReport.id === messageId) updateQuickReactionButtons(messageId);
+                    renderReportsList(reportsArray);
+                    if (successMsg) { successMsg.innerText = "Error applying reaction."; successMsg.style.color = "#d39e00"; fadeReactionStatus(); }
+                    break;
+                }
+            }
+        } catch (e) {
+            reactionCache[cacheKey] = !!reactionConfirmed[cacheKey];
+            if (window.currentSelectedReport && window.currentSelectedReport.id === messageId) updateQuickReactionButtons(messageId);
+            renderReportsList(reportsArray);
+            if (successMsg) { successMsg.innerText = "Network Error."; successMsg.style.color = "#dc3545"; fadeReactionStatus(); }
+        } finally {
+            reactionPending.delete(cacheKey);
+        }
+    }
+
+
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .ss-spin-once { animation: ss-spin 0.5s linear; }
+        @keyframes ss-spin { 100% { transform: rotate(360deg); } }
+        .ss-quick-react { cursor: pointer; font-size: 1.2em; transition: transform 0.1s, opacity 0.15s; position: relative; }
+        .ss-quick-react:hover { transform: scale(1.2); }
+        .ss-quick-react:active { transform: scale(0.9); }
+        .ss-quick-react.ss-reacted-by-other::after {
+            content: attr(data-emoji);
+            position: absolute;
+            top: 0;
+            left: 0;
+            line-height: inherit;
+            font-size: inherit;
+            filter: brightness(0) saturate(100%) invert(25%) sepia(45%) saturate(1019%) hue-rotate(150deg) brightness(91%) contrast(94%);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #reportInfoPopup { box-shadow: 0 12px 42px 8px rgba(3, 35, 53, 0.38) !important; }
+        #reportInfoPopup .ss-report-copyable { cursor: pointer; transition: opacity 0.1s ease; }
+        #reportInfoPopup .ss-report-copyable.ss-copied { opacity: 0.5 !important; }
+
+        #reportInfoPopup { display: flex; flex-direction: column; height: auto !important; min-height: 0 !important; max-height: calc(100vh - 20px); overflow-y: auto; }
+        #reportInfoPopup > div:first-child { flex-shrink: 0; }
+        #reportInfoPopup .ss-report-popup-body {
+            display: flex;
+            flex: 0 0 auto;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 0;
+            row-gap: 16px;
+        }
+        #reportInfoPopup .ss-report-popup-quick { flex-wrap: wrap; }
+        .ss-report-tag-cheater { color: #fff !important; background: #900100 !important; }
+        .ss-report-tag-toxic { color: #fff !important; background: #7b4a24 !important; }
+        .ss-report-tag-bot { color: #fff !important; background: #900100 !important; }
+        .ss-report-tag-creator { color: #fff !important; background: #e91e63 !important; }
+        .ss-report-tag-member { color: #fff !important; background: #1abc9c !important; }
+        .ss-report-tag-eggforcer { color: #fff !important; background: #71368a !important; }
+        .ss-report-tag-nametag { color: #fff !important; background: #0c576f !important; }
+        .ss-report-tag-wizard { color: #fff !important; background: #3498db !important; }
+        #custom-reports-panel .ss-report-log-tags { flex-wrap: wrap; }
+        #reportInfoPopup .ss-report-user-tags .ss-report-tag {
+            display: inline-block; color: #fff !important; font-size: 0.7em;
+            font-weight: 900; line-height: 1.2; padding: 2px 8px; border-radius: 5px;
+        }
+        #custom-reports-panel .ss-report-log-tags .ss-report-tag {
+            display: inline-block; color: #fff !important;
+            font-size: calc(9 * var(--ss-report-unit)) !important;
+            font-weight: 900; line-height: 1.2;
+            padding: calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit));
+            border-radius: calc(4 * var(--ss-report-unit)); white-space: nowrap;
+        }
+        #report_popup_observe_btn .ss-observer-main { display: block; }
+        #report_popup_observe_btn .ss-observer-new-tab { display: none; }
+        #report_popup_observe_btn:hover .ss-observer-new-tab,
+        #report_popup_observe_btn:focus-visible .ss-observer-new-tab { display: block; }
+
+
+        #custom-reports-panel { --ss-report-unit: 1px; font-size: calc(14 * var(--ss-report-unit)) !important; box-sizing: border-box; width: 100%; }
+        #custom-reports-panel .ss-report-header { font-size: calc(18 * var(--ss-report-unit)) !important; line-height: 1.2 !important; }
+        #custom-reports-panel #ss-reports-view-toggle { font-size: calc(18 * var(--ss-report-unit)) !important; line-height: 1.2 !important; white-space: nowrap; }
+        #custom-reports-panel #ss-reports-view-toggle.ss-action-view { font-size: calc(14 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .ss-action-count {
+            display: none; align-items: center; justify-content: center;
+            min-width: calc(18 * var(--ss-report-unit)); height: calc(18 * var(--ss-report-unit));
+            box-sizing: border-box; padding: 0 calc(4 * var(--ss-report-unit));
+            border-radius: calc(6 * var(--ss-report-unit));
+            color: #fff !important; background: #0c576f !important;
+            font-size: calc(11 * var(--ss-report-unit)) !important;
+            font-family: Arial, sans-serif !important; font-weight: 700;
+            text-shadow: none !important; letter-spacing: normal;
+            line-height: 1; white-space: nowrap; flex: 0 0 auto; cursor: pointer;
+        }
+        #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
+        #custom-reports-panel .ss-report-header { gap: calc(12 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel #ss-refresh-trigger { flex-shrink: 0; white-space: nowrap; }
+        #custom-reports-panel #ss-reports-updated { color: #fff !important; }
+        #custom-reports-panel #ss-refresh-icon { color: #fff !important; }
+        #custom-reports-panel #ss-reports-updated { font-size: calc(10 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel #ss-refresh-icon { font-size: calc(12 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel #ss-refresh-trigger { gap: calc(6 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel #ss-reports-list,
+        #custom-reports-panel #ss-reports-list > .player-challenge-single {
+            background: #06baf7 !important;
+            background-image: none !important;
+        }
+        #custom-reports-panel .player-challenge-single { padding: calc(8 * var(--ss-report-unit)) 0 !important; }
+        #custom-reports-panel .player-challenge-single-wrap { gap: calc(6 * var(--ss-report-unit)) !important; padding-top: calc(4 * var(--ss-report-unit)) !important; padding-bottom: calc(4 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .player-challenge-single h4 { font-size: calc(14 * var(--ss-report-unit)) !important; line-height: 1.2 !important; }
+        #custom-reports-panel .player-challenge-single h4.ss-report-long-name { font-size: calc(12 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .player-challenge-single h4 i { font-size: calc(11 * var(--ss-report-unit)) !important; margin-right: calc(4 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .player-challenge-single p { font-size: calc(11 * var(--ss-report-unit)) !important; line-height: 1.25 !important; }
+        #custom-reports-panel .ss-report-actions { gap: calc(6 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .ss-report-action-stack { display: flex; flex-direction: column; align-items: flex-start; gap: calc(3 * var(--ss-report-unit)); }
+        #custom-reports-panel .ss-report-action-buttons { display: flex; flex-direction: row; align-items: stretch; gap: calc(6 * var(--ss-report-unit)); }
+        #custom-reports-panel .ss-report-clock { display: block; width: calc(50 * var(--ss-report-unit)); text-align: center; white-space: nowrap; color: #0c576f !important; font-size: calc(10 * var(--ss-report-unit)) !important; font-weight: 700; line-height: 1.1; }
+        #custom-reports-panel .ss-report-actions.ss-action-taken-actions { align-self: stretch; align-items: stretch !important; }
+        #custom-reports-panel .ss-action-taken-meta { display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-end; gap: calc(3 * var(--ss-report-unit)); }
+        #custom-reports-panel .ss-auto-join-btn { font-size: calc(12 * var(--ss-report-unit)) !important; padding: calc(5 * var(--ss-report-unit)) calc(10 * var(--ss-report-unit)) !important; min-width: calc(50 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .ss-observe-btn { width: calc(30 * var(--ss-report-unit)) !important; height: auto !important; min-width: calc(30 * var(--ss-report-unit)) !important; align-self: stretch; }
+        #custom-reports-panel .ss-report-server-line { display: flex; align-items: center; gap: calc(4 * var(--ss-report-unit)); min-width: 0; }
+        #custom-reports-panel .ss-report-server-code { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--ss-report-unit)) !important; font-family: inherit !important; line-height: inherit !important; font-weight: inherit !important; }
+        #custom-reports-panel .ss-report-recent-badge { flex: 0 0 auto; white-space: nowrap; }
+        #custom-reports-panel .ss-observe-btn i { font-size: calc(14 * var(--ss-report-unit)) !important; }
+        #custom-reports-panel .ss-other-mod-reactions { display: inline-flex; align-items: center; gap: calc(3 * var(--ss-report-unit)); flex: 0 0 auto; white-space: nowrap; }
+        #custom-reports-panel .ss-other-mod-reactions .ss-other-mod-emoji { font-size: calc(16 * var(--ss-report-unit)) !important; line-height: 1 !important; }
+        #custom-reports-panel .ss-other-mod-reactions img { width: calc(16 * var(--ss-report-unit)); height: calc(16 * var(--ss-report-unit)); object-fit: contain; }
+        #custom-reports-panel #ss-reports-placeholder { font-size: calc(12 * var(--ss-report-unit)) !important; padding: calc(15 * var(--ss-report-unit)) !important; font-weight: 700 !important; }
+        #custom-reports-panel { height: auto !important; min-height: 0 !important; padding-bottom: 0 !important; overflow: hidden; }
+        #custom-reports-panel .media-tabs-content,
+        #custom-reports-panel .tab-content,
+        #custom-reports-panel .news-container,
+        #custom-reports-panel .player-challenges-aside,
+        #custom-reports-panel #ss-reports-list {
+            height: auto !important;
+            min-height: 0 !important;
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        #custom-reports-panel .media-tabs-content,
+        #custom-reports-panel .tab-content { flex: 0 0 auto !important; }
+        #custom-reports-panel .news-container { max-height: calc(250 * var(--ss-report-unit)) !important; overflow-y: auto !important; overflow-x: hidden !important; }
+    `;
+    document.head.appendChild(style);
+
+    function updateTimeText() {
+        const el = document.getElementById('ss-reports-updated');
+        if (!el) return;
+        const diff = Math.floor((Date.now() - lastUpdateTime) / 1000);
+        if (diff < 5) el.innerText = "Just now";
+        else if (diff < 60) el.innerText = `${diff}s ago`;
+        else el.innerText = `${Math.floor(diff/60)}m ago`;
+    }
+    setInterval(updateTimeText, 1000);
+
+    function doAutoJoin(serverCode) {
+        if (!serverCode || serverCode === "Unknown") {
+            alert("No server code available for this report.");
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.textContent = "if (typeof vueApp !== 'undefined') vueApp.leaveGame();";
+        document.body.appendChild(script);
+        script.remove();
+
+        const playWithFriendsBtn = document.querySelector('.btn_play_w_friends');
+        if (playWithFriendsBtn) playWithFriendsBtn.click();
+
+        const checkInput = setInterval(() => {
+            const joinPanel = document.querySelector('.play-panel-panels-join');
+            if (joinPanel) {
+                const inputField = joinPanel.querySelector('input.ss_field[placeholder="Enter your code"]');
+                const finalJoinBtn = joinPanel.querySelector('.ss_button_join');
+
+                if (inputField && finalJoinBtn) {
+                    clearInterval(checkInput);
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    nativeInputValueSetter.call(inputField, serverCode);
+                    inputField.dispatchEvent(new Event('input', { bubbles: true }));
+                    setTimeout(() => finalJoinBtn.click(), 100);
+                }
+            }
+        }, 50);
+        setTimeout(() => clearInterval(checkInput), 3000);
+    }
+
+    function injectPopup() {
+        const currentOverlay = document.getElementById('reportPopupOverlay');
+        const currentPopup = document.getElementById('reportInfoPopup');
+        const requiredPopupIds = [
+            'report_popup_title', 'report_popup_recent', 'report_popup_time',
+            'report_popup_pid_value', 'report_popup_reporter_name', 'report_popup_reporter_id', 'report_popup_reporter_id_line',
+            'report_popup_reason', 'report_popup_success',
+            'report_popup_user_tags', 'report_popup_name_label', 'report_popup_name_tag_wrap', 'report_popup_eggforcer_label', 'report_popup_wizard_label', 'report_popup_cheater_label',
+            'report_popup_toxic_label', 'report_popup_bot_label',
+            'report_popup_creator_label', 'report_popup_member_label',
+            'report_popup_reporter_tags', 'report_popup_reporter_name_label', 'report_popup_reporter_name_tag_wrap', 'report_popup_reporter_wizard_label', 'report_popup_reporter_cheater_label',
+            'report_popup_reporter_toxic_label', 'report_popup_reporter_bot_label',
+            'report_popup_reporter_creator_label', 'report_popup_reporter_member_label',
+            'report_popup_reporter_eggforcer_label',
+            'report_popup_join_btn', 'report_popup_observe_btn',
+            'closeReportPopupBtn'
+        ];
+        if (currentOverlay && currentPopup && currentOverlay.contains(currentPopup) &&
+            requiredPopupIds.every(id => currentOverlay.querySelector(`#${id}`))) return;
+        if (currentOverlay) currentOverlay.remove();
+        if (currentPopup) currentPopup.remove();
+
+        const popupWrap = document.createElement('div');
+        popupWrap.id = "reportPopupOverlay";
+        popupWrap.className = "popup_overlay";
+        popupWrap.style.display = "none";
+        popupWrap.style.zIndex = "999999";
+
+        popupWrap.innerHTML = `
+            <div class="popup_window popup_sm roundme_md centered" id="reportInfoPopup">
+                <div>
+                    <button class="roundme_sm popup_close clickme" id="closeReportPopupBtn">
+                        <i class="fas fa-times text_white fa-2x"></i>
+                    </button>
+                    <p id="report_popup_recent" style="text-align: center; font-size: 13px; font-weight: 400; color: #fff; padding: 1px 6px; border-radius: 5px; line-height: 1.2; width: fit-content; margin: 4px auto 8px; display: none;"></p>
+                    <div id="report_popup_user_tags" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px;">
+                        <span id="report_popup_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
+                        <span id="report_popup_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
+                        <span id="report_popup_cheater_label" class="ss-report-tag ss-report-tag-cheater" style="display: none;">CHEATER</span>
+                        <span id="report_popup_toxic_label" class="ss-report-tag ss-report-tag-toxic" style="display: none;">TOXIC</span>
+                        <span id="report_popup_bot_label" class="ss-report-tag ss-report-tag-bot" style="display: none;">BOT</span>
+                        <span id="report_popup_creator_label" class="ss-report-tag ss-report-tag-creator" style="display: none;">CONTENT CREATOR</span>
+                        <span id="report_popup_member_label" class="ss-report-tag ss-report-tag-member" style="display: none;">BWD MEMBER</span>
+                    </div>
+                    <h3 id="report_popup_title" class="roundme_sm shadow_blue4 nospace text_white clickme ss-report-copyable" style="margin-bottom: 2px; text-align: center; width: 100%;" title="Click to copy username" role="button" tabindex="0">Name</h3>
+                    <div id="report_popup_name_tag_wrap" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; margin: 4px 0;">
+                        <span id="report_popup_name_label" class="ss-report-tag ss-report-tag-nametag" style="display: none;"></span>
+                    </div>
+                    <p id="report_popup_pid" class="clickme" style="margin: 8px 0 4px; text-align: center; color: #0c576f; cursor: pointer; font-size: 0.85em;" title="Click to copy Player ID" role="button" tabindex="0"><strong style="font-weight: 900;">ID:</strong> <span id="report_popup_pid_value" class="ss-report-copyable" style="color: #0c576f; background: #75c3de; padding: 1px 6px; border-radius: 5px; display: inline-block; line-height: 1.2;"></span></p>
+                </div>
+                <div class="popup_sm_content ss-report-popup-body" style="text-align: center; padding: 6px 15px 14px;">
+                    <p id="report_popup_reason" style="margin: 0; color: #cc0000; font-weight: 900; text-transform: uppercase;"></p>
+                    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                        <p id="report_popup_reporter" class="clickme ss-report-copyable" style="margin: 0; color: #0c576f; cursor: pointer;" title="Click to copy reporter username" role="button" tabindex="0"><strong style="font-weight: 900;">Reported by:</strong> <span id="report_popup_reporter_name" style="color: #fff;"></span></p>
+                        <div id="report_popup_reporter_name_tag_wrap" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; margin: 4px 0;">
+                            <span id="report_popup_reporter_name_label" class="ss-report-tag ss-report-tag-nametag" style="display: none;"></span>
+                        </div>
+                        <p id="report_popup_reporter_id_line" style="display: none; margin: 0; color: #0c576f; font-size: 0.85em;"><strong style="font-weight: 900;">ID:</strong> <span id="report_popup_reporter_id" class="clickme ss-report-copyable" style="color: #0c576f; background: #75c3de; padding: 1px 6px; border-radius: 5px; display: inline-block; line-height: 1.2; cursor: pointer;" title="Click to copy reporter ID" role="button" tabindex="0"></span></p>
+                        <div id="report_popup_reporter_tags" class="ss-report-user-tags" style="display: none; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin: 2px 0 0;">
+                            <span id="report_popup_reporter_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
+                            <span id="report_popup_reporter_cheater_label" class="ss-report-tag ss-report-tag-cheater" style="display: none;">CHEATER</span>
+                            <span id="report_popup_reporter_toxic_label" class="ss-report-tag ss-report-tag-toxic" style="display: none;">TOXIC</span>
+                            <span id="report_popup_reporter_bot_label" class="ss-report-tag ss-report-tag-bot" style="display: none;">BOT</span>
+                            <span id="report_popup_reporter_creator_label" class="ss-report-tag ss-report-tag-creator" style="display: none;">CONTENT CREATOR</span>
+                            <span id="report_popup_reporter_member_label" class="ss-report-tag ss-report-tag-member" style="display: none;">BWD MEMBER</span>
+                            <span id="report_popup_reporter_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
+                        </div>
+                    </div>
+                    <p id="report_popup_time" style="margin: 0; color: #fff; font-weight: 700; font-size: 0.9em;"></p>
+
+                    <div class="ss-report-popup-buttons" style="display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%;">
+                        <button id="report_popup_join_btn" class="ss_button btn_small btn_green bevel_green play-button box_relative" style="margin: 0; padding: 8px 15px; font-size: 0.9em; width: 100%; max-width: 250px;">
+                            Join as Player
+                        </button>
+                        <button id="report_popup_observe_btn" class="ss_button btn_small btn_blue bevel_blue play-button box_relative" style="margin: 0; padding: 8px 15px; font-size: 0.9em; width: 100%; max-width: 250px; line-height: 1.05;">
+                            <span class="ss-observer-main">Join as Observer</span><span class="ss-observer-new-tab" style="color: #0c576f; text-shadow: none !important;">(new tab)</span>
+                        </button>
+                    </div>
+                    <div class="ss-report-popup-quick" style="font-size: 0.9em; color: #0c576f; display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: bold; width: 100%; text-align: center;">
+                        <span style="color: #0c576f;"><i class="fab fa-discord" style="color: #0c576f;"></i> Quick Actions:</span>
+                        ${quickEmojis.map(emoji => `<span class="clickme ss-quick-react" data-emoji="${escapeGithubTag(emoji)}">${escapeGithubTag(emoji)}</span>`).join('')}
+                    </div>
+                    <p id="report_popup_success" style="display: none; font-weight: bold; margin: 0; font-size: 0.9em; opacity: 0; transition: opacity 0.2s;"></p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(popupWrap);
+
+        document.getElementById('closeReportPopupBtn').addEventListener('click', () => {
+            document.getElementById('reportPopupOverlay').style.display = 'none';
+        });
+        popupWrap.addEventListener('click', (e) => {
+            if(e.target === popupWrap) popupWrap.style.display = 'none';
+        });
+
+        const copyFlashTimers = new WeakMap();
+        function flashCopiedText(element) {
+            if (!element) return;
+            clearTimeout(copyFlashTimers.get(element));
+            element.classList.add('ss-copied');
+            copyFlashTimers.set(element, setTimeout(() => {
+                element.classList.remove('ss-copied');
+                copyFlashTimers.delete(element);
+            }, 200));
+        }
+
+        async function copyReportValue(value, element) {
+            if (!value) return;
+            flashCopiedText(element);
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard API unavailable');
+                await navigator.clipboard.writeText(String(value));
+            } catch (e) {
+                const field = document.createElement('textarea');
+                field.value = String(value);
+                field.style.position = 'fixed';
+                field.style.opacity = '0';
+                document.body.appendChild(field);
+                field.focus();
+                field.select();
+                document.execCommand('copy');
+                field.remove();
+            }
+        }
+
+        const playerIdElement = document.getElementById('report_popup_pid');
+        const playerIdValue = document.getElementById('report_popup_pid_value');
+        const usernameElement = document.getElementById('report_popup_title');
+        const reporterLineElement = document.getElementById('report_popup_reporter');
+        const reporterIdElement = document.getElementById('report_popup_reporter_id');
+        const copySelectedPlayerId = () => {
+            if (window.currentSelectedReport) copyReportValue(window.currentSelectedReport.pid, playerIdValue);
+        };
+        const copySelectedUsername = () => {
+            if (window.currentSelectedReport) copyReportValue(window.currentSelectedReport.name, usernameElement);
+        };
+        const copySelectedReporterName = () => {
+            if (!window.currentSelectedReport) return;
+            const match = window.currentSelectedReport.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
+            const reporterName = match ? match[1].trim() : window.currentSelectedReport.reporter;
+            copyReportValue(reporterName, reporterLineElement);
+        };
+        const copySelectedReporterId = () => {
+            if (!window.currentSelectedReport) return;
+            const match = window.currentSelectedReport.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
+            if (match) copyReportValue(match[2], reporterIdElement);
+        };
+        [
+            [playerIdElement, copySelectedPlayerId],
+            [usernameElement, copySelectedUsername],
+            [reporterLineElement, copySelectedReporterName],
+            [reporterIdElement, copySelectedReporterId]
+        ].forEach(([element, handler]) => {
+            element.addEventListener('click', handler);
+            element.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handler();
+                }
+            });
+        });
+
+        document.getElementById('report_popup_join_btn').addEventListener('click', () => {
+            if (!window.currentSelectedReport) return;
+            document.getElementById('reportPopupOverlay').style.display = 'none';
+            doAutoJoin(window.currentSelectedReport.server);
+        });
+        document.getElementById('report_popup_observe_btn').addEventListener('click', () => {
+            if (!window.currentSelectedReport) return;
+            if (window.currentSelectedReport.link) window.open(window.currentSelectedReport.link, '_blank');
+            else alert("No observation link available.");
+        });
+
+        document.querySelectorAll('.ss-quick-react').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (!window.currentSelectedReport) return;
+                const emoji = e.target.getAttribute('data-emoji');
+                sendReactionAPI(window.currentSelectedReport.id, emoji);
+            });
+        });
+    }
+
+    function updateLogCounters(reportsArr) {
+        const reportsBadge = document.getElementById('ss-reports-count');
+        const actionBadge = document.getElementById('ss-action-count');
+        if (!reportsBadge || !actionBadge) return;
+        const reportsCount = getVisibleReports(reportsArr || [], 'reports').length;
+        const actionCount = getVisibleReports(reportsArr || [], 'action').length;
+        reportsBadge.textContent = reportsCount > 0 ? String(reportsCount) : '';
+        reportsBadge.style.display = reportsCount > 0 && reportsView === 'reports' ? 'inline-flex' : 'none';
+        actionBadge.textContent = actionCount > 0 ? String(actionCount) : '';
+        actionBadge.style.display = actionCount > 0 && reportsView === 'action' ? 'inline-flex' : 'none';
+    }
+
+    function renderReportsList(reportsArr) {
+        const list = document.getElementById('ss-reports-list');
+        if (!list || !reportsArr) return;
+
+        updateLogCounters(reportsArr);
+        list.classList.toggle('ss-reports-light-only', reportsView === 'reports');
+        list.innerHTML = '';
+
+        const visibleReports = getVisibleReports(reportsArr, reportsView);
+        if (visibleReports.length === 0) {
+            list.innerHTML = `<div id="ss-reports-placeholder" style="padding: 15px; color: #0c576f; font-weight: 700; text-align: center; font-size: 0.8em; word-break: break-all;">${reportsView === 'action' ? 'No action taken yet.' : 'No reports needing action.'}</div>`;
+            return;
+        }
+
+        visibleReports.forEach(report => {
+            const recentCount = Number(report.recentReports) || 0;
+            const recentColor = recentCount >= 10 ? '#000000' : recentCount >= 5 ? '#900100' : recentCount >= 3 ? '#cc0000' : recentCount === 2 ? '#f79520' : '#ffe600';
+            const recentText = recentCount > 0 ? `${recentCount} REPORT${recentCount === 1 ? '' : 'S'}` : '';
+            const actionTakenReactions = reportsView === 'action' ? getActionTakenReactionIndicators(report) : [];
+            const otherModActionReactions = actionTakenReactions.filter(reaction => !reaction.mine);
+            const ownActionReactions = actionTakenReactions.filter(reaction => reaction.mine);
+            const reportClock = Number.isFinite(report.createdAt)
+                ? new Date(report.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+                : '';
+            const originalReportName = String(report.name ?? '');
+            const reportNameLabel = getReportNameLabel(report.name, report.pid);
+            const isCheater = reportNameLabel === 'KNOWN CHEATER' || reportNameLabel === 'CHEATER';
+            const isToxic = isToxicPlayer(report.name, report.pid);
+            const isBot = isBotPlayer(report.name);
+            const isCreator = hasGithubRole(report.pid, 'cc');
+            const isMember = isBwdMemberPlayer(report.pid);
+            const isEggforcer = hasGithubRole(report.pid, 'eggforcer');
+            const isWizard = isWizardPlayer(report.pid);
+            const githubNameTag = getGithubNameTag(report.pid);
+            const logBadgeHtmlByKey = {
+                wizard: isWizard ? '<span class="ss-report-tag ss-report-tag-wizard">WIZARD</span>' : '',
+                eggforcer: isEggforcer ? '<span class="ss-report-tag ss-report-tag-eggforcer">EGGFORCER</span>' : '',
+                cc: isCreator ? '<span class="ss-report-tag ss-report-tag-creator">CC</span>' : '',
+                member: isMember ? '<span class="ss-report-tag ss-report-tag-member">MEMBER</span>' : '',
+                cheater: isCheater ? '<span class="ss-report-tag ss-report-tag-cheater">CHEATER</span>' : '',
+                toxic: isToxic ? '<span class="ss-report-tag ss-report-tag-toxic">TOXIC</span>' : '',
+                bot: isBot ? '<span class="ss-report-tag ss-report-tag-bot">BOT</span>' : ''
+            };
+            const orderedLogBadges = getOrderedReportTagKeys(report.pid)
+                .map(key => logBadgeHtmlByKey[key] || '').join('');
+            const logBadgeMarkup = `${githubNameTag ? `<span class="ss-report-tag ss-report-tag-nametag">${escapeGithubTag(githubNameTag)}</span>` : ''}${orderedLogBadges}`;
+            const reportRow = document.createElement('div');
+            reportRow.className = "player-challenge-single box_relative display-flex align-items-center f_row";
+            reportRow.style.height = "auto";
+            reportRow.style.padding = "8px 0";
+
+            reportRow.innerHTML = `
+                <div class="player-challenge-single-wrap ss_paddingright ss_paddingleft fullwidth" style="display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; align-items: center; padding-top: 4px; padding-bottom: 4px; width: 100%; box-sizing: border-box; gap: 6px;">
+                    <div class="player-challenge-single-content clickme" style="display: flex; flex-direction: column; justify-content: center; flex: 1 1 auto; overflow: hidden; text-align: left;">
+                        ${logBadgeMarkup ? `<div class="ss-report-log-tags" style="display: flex; align-items: center; gap: 5px; margin-bottom: 3px;">${logBadgeMarkup}</div>` : ''}
+                        ${otherModActionReactions.length ? `<div class="ss-action-taken-name-line" style="display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 2px;">
+                            <div class="ss-action-taken-reaction-column" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex: 0 0 auto;">
+                                <span class="ss-other-mod-reactions ss-other-mod-reactions-by-name" title="Other moderators’ reactions"></span>
+                                ${ownActionReactions.length ? '<span class="ss-other-mod-reactions ss-my-action-reactions" title="Your action taken reactions"></span>' : ''}
+                            </div>` : ''}
+                        <h4 class="nospace text_blue5 line-height-1 clickme${reportsView === 'reports' && originalReportName.trim().length > 10 ? ' ss-report-long-name' : ''}" style="font-size: 0.9em; margin-bottom: ${otherModActionReactions.length ? '0' : '2px'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;${otherModActionReactions.length ? ' min-width: 0; flex: 0 1 auto;' : ''}">
+                            <i class="fas fa-info-circle text_blue4" style="font-size: 0.8em; margin-right: 4px;"></i>${originalReportName}
+                        </h4>
+                        ${otherModActionReactions.length ? '</div>' : ''}
+                        <p class="nospace text_yellow_bright font-nunito ss-report-server-line" style="font-size: 0.75em; color: #fffc00 !important;">
+                            <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="font-size: 0.85em; color: #fff !important; background: ${recentColor}; padding: 1px 4px; border-radius: 5px; display: inline-block; line-height: 1.2; font-weight: 700;">${recentText}</span>` : ''}
+                        </p>
+                        ${reportsView === 'action' && reportClock ? `<span class="ss-report-clock">${reportClock}</span>` : ''}
+                    </div>
+                    <div class="ss-report-actions${reportsView === 'action' ? ' ss-action-taken-actions' : ''}" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;">
+                        ${reportsView === 'reports' ? `
+                        <div class="ss-report-action-stack">
+                            <div class="ss-report-action-buttons">
+                                <button class="ss_button btn_small btn_green bevel_green play-button box_relative ss-auto-join-btn" style="margin: 0; padding: 5px 10px; font-size: 0.8em; min-width: 50px;">
+                                    Join
+                                </button>
+                                <button class="ss_button pause-screen-ui btn_blue bevel_blue box_relative text-shadow-none text_blue1 btn_sm ss-observe-btn" style="margin: 0; padding: 0; width: 30px; height: 30px; min-width: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; box-sizing: border-box;">
+                                    <i class="fas fa-eye" style="margin: 0; font-size: 0.9em;"></i>
+                                </button>
+                            </div>
+                            ${reportClock ? `<span class="ss-report-clock">${reportClock}</span>` : ''}
+                        </div>` : ''}
+                        ${reportsView === 'action' ? `
+                        <div class="ss-action-taken-meta">
+                            ${ownActionReactions.length && !otherModActionReactions.length ? '<span class="ss-other-mod-reactions ss-my-action-reactions" title="Your action taken reactions"></span>' : ''}
+                        </div>` : ''}
+                    </div>
+                </div>
+            `;
+
+            const otherEmojiHolder = reportRow.querySelector('.ss-other-mod-reactions-by-name');
+            const myEmojiHolder = reportRow.querySelector('.ss-my-action-reactions');
+            if (otherEmojiHolder || myEmojiHolder) {
+                actionTakenReactions.forEach(reaction => {
+                    const emojiHolder = reaction.mine ? myEmojiHolder : otherEmojiHolder;
+                    if (!emojiHolder) return;
+                    if (reaction.emojiId && /^\d+$/.test(String(reaction.emojiId))) {
+                        const img = document.createElement('img');
+                        img.src = `https://cdn.discordapp.com/emojis/${reaction.emojiId}.${reaction.animated ? 'gif' : 'png'}`;
+                        img.alt = reaction.emoji;
+                        img.title = reaction.mine ? 'Your reaction' : 'Another moderator’s reaction';
+                        img.style.opacity = reaction.mine ? '0.5' : '1';
+                        emojiHolder.appendChild(img);
+                    } else {
+                        const emoji = document.createElement('span');
+                        emoji.className = 'ss-other-mod-emoji';
+                        emoji.textContent = reaction.emoji;
+                        emoji.title = reaction.mine ? 'Your reaction' : 'Another moderator’s reaction';
+                        emoji.style.opacity = reaction.mine ? '0.5' : '1';
+                        emojiHolder.appendChild(emoji);
+                    }
+                    const indicator = emojiHolder.lastElementChild;
+                    if (reaction.mine && indicator) {
+                        indicator.style.cursor = 'pointer';
+                        indicator.title = 'Click to remove your reaction';
+                        indicator.setAttribute('role', 'button');
+                        indicator.setAttribute('tabindex', '0');
+                        const removeOwnReaction = event => {
+                            event.stopPropagation();
+                            const discordEmoji = reaction.emojiId ? `${reaction.emoji}:${reaction.emojiId}` : reaction.emoji;
+                            const cacheKey = `${report.id}-${encodeURIComponent(discordEmoji)}`;
+                            if (reactionCache[cacheKey]) sendReactionAPI(report.id, discordEmoji);
+                        };
+                        indicator.addEventListener('click', removeOwnReaction);
+                        indicator.addEventListener('keydown', event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                removeOwnReaction(event);
+                            }
+                        });
+                    }
+                });
+            }
+
+            const textWrap = reportRow.querySelector('.player-challenge-single-content');
+            textWrap.addEventListener('click', () => {
+                injectPopup();
+                const overlay = document.getElementById('reportPopupOverlay');
+                if (!overlay) return;
+                const title = overlay.querySelector('#report_popup_title');
+                const recentEl = overlay.querySelector('#report_popup_recent');
+                const userTags = overlay.querySelector('#report_popup_user_tags');
+                const cheaterLabel = overlay.querySelector('#report_popup_cheater_label');
+                const toxicLabel = overlay.querySelector('#report_popup_toxic_label');
+                const botLabel = overlay.querySelector('#report_popup_bot_label');
+                const creatorLabel = overlay.querySelector('#report_popup_creator_label');
+                const memberLabel = overlay.querySelector('#report_popup_member_label');
+                const time = overlay.querySelector('#report_popup_time');
+                const playerId = overlay.querySelector('#report_popup_pid_value');
+                const reporterName = overlay.querySelector('#report_popup_reporter_name');
+                const reporterId = overlay.querySelector('#report_popup_reporter_id');
+                const reporterIdLine = overlay.querySelector('#report_popup_reporter_id_line');
+                const reporterTags = overlay.querySelector('#report_popup_reporter_tags');
+                const reporterCheaterLabel = overlay.querySelector('#report_popup_reporter_cheater_label');
+                const reporterToxicLabel = overlay.querySelector('#report_popup_reporter_toxic_label');
+                const reporterBotLabel = overlay.querySelector('#report_popup_reporter_bot_label');
+                const reporterCreatorLabel = overlay.querySelector('#report_popup_reporter_creator_label');
+                const reporterMemberLabel = overlay.querySelector('#report_popup_reporter_member_label');
+                const reporterEggforcerLabel = overlay.querySelector('#report_popup_reporter_eggforcer_label');
+                const reason = overlay.querySelector('#report_popup_reason');
+                const reactionStatus = overlay.querySelector('#report_popup_success');
+                if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
+
+                window.currentSelectedReport = report;
+                title.innerText = originalReportName; // Exact username; bot detection never changes it.
+                const nameLabel = getReportNameLabel(report.name, report.pid);
+                const showCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
+                const showToxic = isToxicPlayer(report.name, report.pid);
+                const showBot = isBotPlayer(report.name);
+                const showCreator = hasGithubRole(report.pid, 'cc');
+                const showMember = isBwdMemberPlayer(report.pid);
+                const showEggforcer = hasGithubRole(report.pid, 'eggforcer');
+                const showWizard = isWizardPlayer(report.pid);
+                const nameTag = getGithubNameTag(report.pid);
+                const nameLabelEl = overlay.querySelector('#report_popup_name_label');
+                const nameTagWrap = overlay.querySelector('#report_popup_name_tag_wrap');
+                const eggforcerLabel = overlay.querySelector('#report_popup_eggforcer_label');
+                const wizardLabel = overlay.querySelector('#report_popup_wizard_label');
+                if (nameLabelEl) { nameLabelEl.textContent = nameTag; nameLabelEl.style.display = nameTag ? 'inline-block' : 'none'; }
+                if (nameTagWrap) nameTagWrap.style.display = nameTag ? 'flex' : 'none';
+                if (eggforcerLabel) eggforcerLabel.style.display = showEggforcer ? 'inline-block' : 'none';
+                if (wizardLabel) wizardLabel.style.display = showWizard ? 'inline-block' : 'none';
+                userTags.style.display = showCheater || showToxic || showBot || showCreator || showMember || showEggforcer || showWizard ? 'flex' : 'none';
+                cheaterLabel.style.display = showCheater ? 'inline-block' : 'none';
+                if (showCheater) cheaterLabel.textContent = nameLabel;
+                toxicLabel.style.display = showToxic ? 'inline-block' : 'none';
+                botLabel.style.display = showBot ? 'inline-block' : 'none';
+                creatorLabel.style.display = showCreator ? 'inline-block' : 'none';
+                memberLabel.style.display = showMember ? 'inline-block' : 'none';
+                const recentCount = Number(report.recentReports) || 0;
+                recentEl.style.display = recentCount > 0 ? '' : 'none';
+                if (recentCount > 0) {
+                    recentEl.innerText = `${recentCount} RECENT REPORT${recentCount === 1 ? '' : 'S'}`;
+                    recentEl.style.color = '#fff';
+                    recentEl.style.backgroundColor = recentCount >= 10 ? '#000000' : recentCount >= 5 ? '#900100' : recentCount >= 3 ? '#cc0000' : recentCount === 2 ? '#f79520' : '#ffe600';
+                    recentEl.style.fontWeight = '700';
+                    recentEl.style.fontSize = '13px';
+                }
+                time.innerText = report.time;
+                playerId.textContent = report.pid;
+                const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
+                const reporterPlayerName = reporterMatch ? reporterMatch[1].trim() : report.reporter;
+                const reporterPlayerId = reporterMatch ? reporterMatch[2] : '';
+                reporterName.textContent = reporterPlayerName;
+                reporterId.textContent = reporterPlayerId;
+                reporterIdLine.style.display = reporterMatch ? 'block' : 'none';
+                const reporterNameLabel = getReportNameLabel(reporterPlayerName, reporterPlayerId);
+                const reporterCheater = reporterNameLabel === 'KNOWN CHEATER' || reporterNameLabel === 'CHEATER';
+                const reporterToxic = isToxicPlayer(reporterPlayerName, reporterPlayerId);
+                const reporterBot = isBotPlayer(reporterPlayerName);
+                const reporterCreator = hasGithubRole(reporterPlayerId, 'cc');
+                const reporterMember = isBwdMemberPlayer(reporterPlayerId);
+                const reporterEggforcer = hasGithubRole(reporterPlayerId, 'eggforcer');
+                const reporterWizard = isWizardPlayer(reporterPlayerId);
+                const reporterNameTag = getGithubNameTag(reporterPlayerId);
+                const reporterNameTagLabel = overlay.querySelector('#report_popup_reporter_name_label');
+                const reporterNameTagWrap = overlay.querySelector('#report_popup_reporter_name_tag_wrap');
+                const reporterWizardLabel = overlay.querySelector('#report_popup_reporter_wizard_label');
+                if (reporterNameTagLabel) { reporterNameTagLabel.textContent = reporterNameTag; reporterNameTagLabel.style.display = reporterNameTag ? 'inline-block' : 'none'; }
+                if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameTag ? 'flex' : 'none';
+                if (reporterWizardLabel) reporterWizardLabel.style.display = reporterWizard ? 'inline-block' : 'none';
+                reporterTags.style.display = reporterCheater || reporterToxic || reporterBot || reporterCreator || reporterMember || reporterEggforcer || reporterWizard ? 'flex' : 'none';
+                reporterCheaterLabel.style.display = reporterCheater ? 'inline-block' : 'none';
+                if (reporterCheater) reporterCheaterLabel.textContent = reporterNameLabel;
+                reporterToxicLabel.style.display = reporterToxic ? 'inline-block' : 'none';
+                reporterBotLabel.style.display = reporterBot ? 'inline-block' : 'none';
+                reporterCreatorLabel.style.display = reporterCreator ? 'inline-block' : 'none';
+                reporterMemberLabel.style.display = reporterMember ? 'inline-block' : 'none';
+                reporterEggforcerLabel.style.display = reporterEggforcer ? 'inline-block' : 'none';
+                reason.innerText = report.reason;
+                const hasMultipleReasons = /,|;|\/|\s+&\s+|\s+and\s+/i.test(report.reason);
+                reason.style.fontSize = hasMultipleReasons ? '' : '1.1em';
+
+                if (successFadeTimeout) clearTimeout(successFadeTimeout);
+                if (reactionStatus) {
+                    reactionStatus.style.opacity = '0';
+                    reactionStatus.style.display = 'none';
+                }
+                updateQuickReactionButtons(report.id);
+                overlay.style.display = 'block';
+                refreshOpenPopupGithubTags();
+                refreshOpenPopupModerationTags();
+                if (!githubPlayerTags.size || Date.now() - lastGithubTagUpdate > 120000) {
+                    loadGithubPlayerTags();
+                }
+            });
+
+            const joinBtn = reportRow.querySelector('.ss-auto-join-btn');
+            if (joinBtn) joinBtn.addEventListener('click', () => doAutoJoin(report.server));
+            const observeBtn = reportRow.querySelector('.ss-observe-btn');
+            if (observeBtn) observeBtn.addEventListener('click', () => {
+                if (report.link) window.open(report.link, '_blank');
+                else alert("No observation link available.");
+            });
+
+            list.appendChild(reportRow);
+        });
+    }
+
+    const initReportsPanel = setInterval(() => {
+        const asideWrap = document.querySelector('.secondary-aside-wrap');
+
+        if (asideWrap && !asideWrap.querySelector(':scope > #custom-reports-panel')) {
+            injectPopup();
+            fetchDiscordReports();
+
+            const reportsBox = document.createElement('div');
+            reportsBox.id = "custom-reports-panel";
+            reportsBox.className = "media-tabs-wrapper box_relative border-blue5 roundme_sm bg_blue6 common-box-shadow ss_margintop_sm";
+            reportsBox.innerHTML = `
+                <div class="media-tab-container display-grid align-items-center gap-sm bg_blue3">
+                    <h4 class="common-box-shadow text-shadow-black-40 text_white ss-report-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 0;">
+                        <div class="ss-report-heading-group">
+                            <div class="clickme" id="ss-reports-view-toggle" style="font-size: 1em; cursor: pointer;" title="Switch between Reports and Action taken">Reports</div>
+                            <span id="ss-reports-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Action taken" title="View Action taken"></span>
+                            <span id="ss-action-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Reports" title="View Reports"></span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" id="ss-refresh-trigger" title="Force Refresh">
+                            <span id="ss-reports-updated" class="text_white" style="font-size: 0.5em; font-weight: 700; font-family: sans-serif; opacity: 0.7; letter-spacing: 0.5px;">Waiting...</span>
+                            <i class="fas fa-sync-alt text_white" id="ss-refresh-icon" style="font-size: 0.6em; opacity: 0.9;"></i>
+                        </div>
+                    </h4>
+                </div>
+                <div class="media-tabs-content f_col">
+                    <div class="tab-content">
+                        <div class="news-container f_row overflow-hidden" style="max-height: 250px; overflow-y: auto; overflow-x: hidden;">
+                            <div class="player-challenges-aside box_relative bg_blue6 home-screen" style="width: 100%;">
+                                <section id="ss-reports-list" class="player-challenges-container overflow-hidden" style="display: flex; flex-direction: column;">
+                                    <div id="ss-reports-placeholder" style="padding: 15px; color: #0c576f; font-weight: 700; text-align: center; font-size: 0.8em; word-break: break-all;">
+                                        Fetching Discord...
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            asideWrap.appendChild(reportsBox);
+            const viewHeading = reportsBox.querySelector('#ss-reports-view-toggle');
+            if (viewHeading) {
+                viewHeading.innerText = reportsView === 'reports' ? 'Reports' : 'Action taken';
+                viewHeading.classList.toggle('ss-action-view', reportsView === 'action');
+            }
+            updateLogCounters(reportsArray);
+            if (reportsArray.length) renderReportsList(reportsArray);
+            updateTimeText();
+
+            const baseDPR = window.devicePixelRatio || 1;
+            const baseViewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
+            const parentVisualScale = () => {
+                const width = asideWrap.offsetWidth;
+                return width ? asideWrap.getBoundingClientRect().width / width : 1;
+            };
+            const baseParentScale = parentVisualScale() || 1;
+            let lastReportUnit = null;
+            const keepReportTextSize = () => {
+                const dprRatio = (window.devicePixelRatio || 1) / baseDPR;
+                const viewportRatio = (window.visualViewport ? (window.visualViewport.scale || 1) : 1) / baseViewportScale;
+                const gameScaleRatio = parentVisualScale() / baseParentScale;
+                const scale = dprRatio * viewportRatio * gameScaleRatio;
+                if (!Number.isFinite(scale) || scale <= 0) return;
+                const unit = 1 / scale;
+                if (lastReportUnit === null || Math.abs(lastReportUnit - unit) > 0.001) {
+                    reportsBox.style.setProperty('--ss-report-unit', `${unit}px`);
+                    lastReportUnit = unit;
+                }
+            };
+            keepReportTextSize();
+            window.addEventListener('resize', keepReportTextSize);
+            if (window.visualViewport) window.visualViewport.addEventListener('resize', keepReportTextSize);
+
+            document.getElementById('ss-reports-view-toggle').addEventListener('click', () => {
+                reportsView = reportsView === 'reports' ? 'action' : 'reports';
+                const heading = document.getElementById('ss-reports-view-toggle');
+                if (heading) {
+                    heading.innerText = reportsView === 'reports' ? 'Reports' : 'Action taken';
+                    heading.classList.toggle('ss-action-view', reportsView === 'action');
+                }
+                renderReportsList(reportsArray);
+            });
+
+            const switchToLog = view => {
+                if (reportsView === view) return;
+                reportsView = view;
+                const heading = document.getElementById('ss-reports-view-toggle');
+                if (heading) {
+                    heading.innerText = reportsView === 'reports' ? 'Reports' : 'Action taken';
+                    heading.classList.toggle('ss-action-view', reportsView === 'action');
+                }
+                renderReportsList(reportsArray);
+            };
+            [
+                [reportsBox.querySelector('#ss-reports-count'), 'action'],
+                [reportsBox.querySelector('#ss-action-count'), 'reports']
+            ].forEach(([badge, destination]) => {
+                if (!badge) return;
+                badge.addEventListener('click', () => switchToLog(destination));
+                badge.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        switchToLog(destination);
+                    }
+                });
+            });
+
+            document.getElementById('ss-refresh-trigger').addEventListener('click', () => {
+                const icon = document.getElementById('ss-refresh-icon');
+                if (icon) {
+                    icon.classList.remove('ss-spin-once');
+                    void icon.offsetWidth;
+                    icon.classList.add('ss-spin-once');
+                }
+                fetchDiscordReports();
+                loadGithubLinkHub(true);
+            });
+
+            const syncReportsVisibility = () => {
+                if (!reportsBox.isConnected) return;
+                const nativeChallenges = asideWrap.querySelector(
+                    ':scope > div:not(.house-small):not(#custom-reports-panel) > .media-tabs-wrapper'
+                );
+                let visible = !!nativeChallenges;
+                let opacity = 1;
+
+                if (nativeChallenges) {
+                    for (let element = nativeChallenges; element && element !== asideWrap; element = element.parentElement) {
+                        const computed = getComputedStyle(element);
+                        if (computed.display === 'none' || computed.visibility === 'hidden' || computed.visibility === 'collapse') {
+                            visible = false;
+                            break;
+                        }
+                        const elementOpacity = Number.parseFloat(computed.opacity);
+                        if (Number.isFinite(elementOpacity)) opacity *= elementOpacity;
+                    }
+                    if (visible) {
+                        const bounds = nativeChallenges.getBoundingClientRect();
+                        visible = bounds.width > 0 && bounds.height > 0;
+                    }
+                }
+
+                const display = visible ? 'block' : 'none';
+                if (reportsBox.style.display !== display) reportsBox.style.display = display;
+                if (visible) {
+                    const nativeOpacity = String(Math.max(0, Math.min(1, opacity)));
+                    if (reportsBox.style.opacity !== nativeOpacity) reportsBox.style.opacity = nativeOpacity;
+                    keepReportTextSize();
+                }
+                requestAnimationFrame(syncReportsVisibility);
+            };
+            syncReportsVisibility();
+        }
+    }, 500);
+
+};
