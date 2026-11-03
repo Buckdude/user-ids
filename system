@@ -53,8 +53,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
     let GITHUB_TOXIC_URL = '';
     let GITHUB_BWD_MEMBER_URL = '';
     let githubLinkHubLoading = false;
-    let githubPrivateMode = false;
-    let githubStaffWarningShown = false;
     let githubLinksWarningShown = false;
     let lastModerationRefresh = 0;
     let lastTagRefresh = 0;
@@ -427,9 +425,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         for (const key of HUB_REQUIRED_LINK_KEYS) {
             if (!isGithubRawUrl(value[key])) throw new Error(`Invalid link: ${key}`);
         }
-        for (const key of ['GITHUB_STAFF_URL', 'GITHUB_PRIVATE_TAGS_URL']) {
-            if (value[key] && !isGithubRawUrl(value[key])) throw new Error(`Invalid link: ${key}`);
-        }
         return value;
     }
     function isGithubRawUrl(url) {
@@ -463,10 +458,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             } catch (error) { browserFallback(error.message || String(error)); }
         });
     }
-    function useGithubLinkHub(links, privateMode, force = false) {
-        const userTagUrl = privateMode && links.GITHUB_PRIVATE_TAGS_URL
-            ? links.GITHUB_PRIVATE_TAGS_URL : links.GITHUB_USER_TAGS_URL;
-        const tagUrlChanged = GITHUB_USER_TAGS_URL !== userTagUrl;
+    function useGithubLinkHub(links, force = false) {
+        const tagUrlChanged = GITHUB_USER_TAGS_URL !== links.GITHUB_USER_TAGS_URL;
         const moderationUrlChanged = [
             GITHUB_WHITELIST_URL !== links.GITHUB_WHITELIST_URL,
             GITHUB_CHEATER_IDS_URL !== links.GITHUB_CHEATER_IDS_URL,
@@ -475,7 +468,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             GITHUB_TOXIC_URL !== links.GITHUB_TOXIC_URL,
             GITHUB_BWD_MEMBER_URL !== links.GITHUB_BWD_MEMBER_URL
         ].some(Boolean);
-        GITHUB_USER_TAGS_URL = userTagUrl;
+        GITHUB_USER_TAGS_URL = links.GITHUB_USER_TAGS_URL;
         GITHUB_WHITELIST_URL = links.GITHUB_WHITELIST_URL;
         GITHUB_CHEATER_IDS_URL = links.GITHUB_CHEATER_IDS_URL;
         GITHUB_KNOWN_CHEATER_NAMES_URL = links.GITHUB_KNOWN_CHEATER_NAMES_URL;
@@ -522,22 +515,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 console.error('[Reports] Links missing.');
                 return;
             }
-            useGithubLinkHub(links, githubPrivateMode, force);
-            let nextPrivateMode = false;
-            if (links.GITHUB_STAFF_URL) {
-                try {
-                    const staffText = await readGithubHubText(links.GITHUB_STAFF_URL);
-                    nextPrivateMode = staffText.trim().toLowerCase() === 'private';
-                    githubStaffWarningShown = false;
-                } catch (_) {
-                    if (!githubStaffWarningShown) console.warn('[Reports] Staff unavailable; public tags active.');
-                    githubStaffWarningShown = true;
-                }
-            }
-            if (githubPrivateMode !== nextPrivateMode) {
-                githubPrivateMode = nextPrivateMode;
-                useGithubLinkHub(links, githubPrivateMode, force);
-            }
+            useGithubLinkHub(links, force);
         } finally {
             githubLinkHubLoading = false;
         }
@@ -1426,7 +1404,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
 
                 window.currentSelectedReport = report;
-                title.innerText = originalReportName; // Exact username; bot detection never changes it.
+                title.innerText = originalReportName;
                 const nameLabel = getReportNameLabel(report.name, report.pid);
                 const showCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
                 const showToxic = isToxicPlayer(report.name, report.pid);
