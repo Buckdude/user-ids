@@ -1357,6 +1357,27 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             lockedReportPopupContents.add(popup);
         }
 
+        function resetReportPopupSizeForNewReport(popup) {
+            if (reportPopupSizeState?.popup === popup) {
+                const original = reportPopupSizeState;
+                popup.style.position = original.position;
+                popup.style.left = original.left;
+                popup.style.top = original.top;
+                popup.style.transform = original.transform;
+                popup.style.transformOrigin = original.transformOrigin;
+                popup.style.maxHeight = original.maxHeight;
+            }
+            popup.style.removeProperty('width');
+            popup.style.removeProperty('max-width');
+            popup.style.removeProperty('font-size');
+            const body = popup.querySelector('.ss-report-popup-body');
+            if (body) {
+                body.style.width = '';
+                body.style.boxSizing = '';
+            }
+            reportPopupSizeState = null;
+        }
+
         function getReportPopupZoom() {
             const browserZoom = window.devicePixelRatio || 1;
             const viewportZoom = window.visualViewport?.scale || 1;
@@ -1862,6 +1883,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     popup.style.display = 'flex';
                     refreshOpenPopupGithubTags();
                     refreshOpenPopupModerationTags();
+                    resetReportPopupSizeForNewReport(popup);
                     keepReportPopupSize();
                     fitReportPopupReason(reason);
                     if (!githubPlayerTags.size || Date.now() - lastGithubTagUpdate > 120000) {
