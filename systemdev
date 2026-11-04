@@ -261,38 +261,23 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function getOrderedReportTagKeys(playerId) {
-            const order = [];
-            const knownKeys = new Set(['script_dev', 'wizard', 'archwizard', 'eggforcer', 'ccmod', 'cc', 'member', 'cheater', 'toxic', 'bot', 'excc', 'mod', 'leaguemod', 'league']);
-            const aliases = {
-                'creator': 'cc', 'content creator': 'cc',
-                'bwd member': 'member', 'bwd_member': 'member',
-                'developer': 'script_dev', 'dev': 'script_dev',
-                'ex_cc': 'excc', 'ex_content_creator': 'excc', 'ex content creator': 'excc',
-                'community_mod': 'mod', 'communitymod': 'mod', 'community mod': 'mod',
-                'league_rep': 'league', 'leaguerep': 'league', 'league rep': 'league',
-                'arch_wizard': 'archwizard', 'league_mod': 'leaguemod'
-            };
-            function add(tag) {
-                const normalized = String(tag ?? '').trim().toLowerCase();
-                const key = aliases[normalized] || normalized;
-                if (knownKeys.has(key) && !order.includes(key)) order.push(key);
-            }
-            const entry = getGithubPlayer(playerId);
-            if (entry && Array.isArray(entry.tags)) entry.tags.forEach(add);
-            ['cheater', 'bot', 'toxic', 'wizard', 'archwizard', 'eggforcer', 'ccmod', 'cc', 'member', 'excc', 'mod', 'leaguemod', 'league'].forEach(add);
-            order.splice(order.indexOf('toxic'), 1);
-            order.unshift('toxic');
-            const existingScriptDevIndex = order.indexOf('script_dev');
-            if (existingScriptDevIndex !== -1) order.splice(existingScriptDevIndex, 1);
-            order.unshift('script_dev');
-            // Keep other tag priorities unchanged, adding the new roles beside their requested tags.
-            for (const [key, anchor, position] of [['mod', 'eggforcer', 'before'], ['leaguemod', 'eggforcer', 'after'], ['league', 'leaguemod', 'after'], ['excc', 'cc', 'before'], ['archwizard', 'wizard', 'after']]) {
-                const from = order.indexOf(key);
-                if (from !== -1) order.splice(from, 1);
-                const at = order.indexOf(anchor);
-                order.splice(at + (position === 'after' ? 1 : 0), 0, key);
-            }
-            return order;
+            const knownKeys = new Set([
+                'script_dev',
+                'wizard',
+                'archwizard',
+                'mod',
+                'eggforcer',
+                'leaguemod',
+                'league',
+                'ccmod',
+                'cc',
+                'excc',
+                'member',
+                'cheater',
+                'bot'
+                'toxic',
+            ]);
+            return [...knownKeys];
         }
 
         function orderPopupReportTags(tagsElement, playerId) {
