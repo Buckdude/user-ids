@@ -245,6 +245,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (role === 'excc') return ['excc', 'ex_cc', 'ex_content_creator', 'ex content creator'].some(tag => entry.tags.includes(tag));
             if (role === 'mod') return ['mod', 'community_mod', 'communitymod', 'community mod'].some(tag => entry.tags.includes(tag));
             if (role === 'league') return ['league', 'league_rep', 'leaguerep', 'league rep'].some(tag => entry.tags.includes(tag));
+            if (role === 'archwizard') return ['archwizard', 'arch_wizard'].some(tag => entry.tags.includes(tag));
+            if (role === 'leaguemod') return ['leaguemod', 'league_mod'].some(tag => entry.tags.includes(tag));
             return entry.tags.includes(role);
         }
 
@@ -260,14 +262,15 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         function getOrderedReportTagKeys(playerId) {
             const order = [];
-            const knownKeys = new Set(['script_dev', 'wizard', 'eggforcer', 'ccmod', 'cc', 'member', 'cheater', 'toxic', 'bot', 'excc', 'mod', 'league']);
+            const knownKeys = new Set(['script_dev', 'wizard', 'archwizard', 'eggforcer', 'ccmod', 'cc', 'member', 'cheater', 'toxic', 'bot', 'excc', 'mod', 'leaguemod', 'league']);
             const aliases = {
                 'creator': 'cc', 'content creator': 'cc',
                 'bwd member': 'member', 'bwd_member': 'member',
                 'developer': 'script_dev', 'dev': 'script_dev',
                 'ex_cc': 'excc', 'ex_content_creator': 'excc', 'ex content creator': 'excc',
                 'community_mod': 'mod', 'communitymod': 'mod', 'community mod': 'mod',
-                'league_rep': 'league', 'leaguerep': 'league', 'league rep': 'league'
+                'league_rep': 'league', 'leaguerep': 'league', 'league rep': 'league',
+                'arch_wizard': 'archwizard', 'league_mod': 'leaguemod'
             };
             function add(tag) {
                 const normalized = String(tag ?? '').trim().toLowerCase();
@@ -276,14 +279,14 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
             const entry = getGithubPlayer(playerId);
             if (entry && Array.isArray(entry.tags)) entry.tags.forEach(add);
-            ['cheater', 'bot', 'toxic', 'wizard', 'eggforcer', 'ccmod', 'cc', 'member', 'excc', 'mod', 'league'].forEach(add);
+            ['cheater', 'bot', 'toxic', 'wizard', 'archwizard', 'eggforcer', 'ccmod', 'cc', 'member', 'excc', 'mod', 'leaguemod', 'league'].forEach(add);
             order.splice(order.indexOf('toxic'), 1);
             order.unshift('toxic');
             const existingScriptDevIndex = order.indexOf('script_dev');
             if (existingScriptDevIndex !== -1) order.splice(existingScriptDevIndex, 1);
             order.unshift('script_dev');
             // Keep other tag priorities unchanged, adding the new roles beside their requested tags.
-            for (const [key, anchor, position] of [['mod', 'eggforcer', 'before'], ['league', 'eggforcer', 'before'], ['excc', 'cc', 'before']]) {
+            for (const [key, anchor, position] of [['mod', 'eggforcer', 'before'], ['league', 'eggforcer', 'before'], ['excc', 'cc', 'before'], ['archwizard', 'wizard', 'after'], ['leaguemod', 'mod', 'after']]) {
                 const from = order.indexOf(key);
                 if (from !== -1) order.splice(from, 1);
                 const at = order.indexOf(anchor);
@@ -298,7 +301,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const suffixToKey = {
                 script_dev_label: 'script_dev',
                 ccmod_label: 'ccmod',
-                excc_label: 'excc', mod_label: 'mod', league_label: 'league',
+                excc_label: 'excc', leaguemod_label: 'leaguemod', mod_label: 'mod', league_label: 'league',
+                archwizard_label: 'archwizard',
                 eggforcer_label: 'eggforcer',
                 creator_label: 'cc', member_label: 'member', wizard_label: 'wizard',
                 cheater_label: 'cheater', toxic_label: 'toxic', bot_label: 'bot'
@@ -423,6 +427,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     excc_label: hasGithubRole(pid, 'excc'),
                     mod_label: hasGithubRole(pid, 'mod'),
                     league_label: hasGithubRole(pid, 'league'),
+                    leaguemod_label: hasGithubRole(pid, 'leaguemod'),
+                    archwizard_label: hasGithubRole(pid, 'archwizard'),
                     creator_label: hasGithubRole(pid, 'cc'),
                     member_label: isBwdMemberPlayer(pid),
                     eggforcer_label: hasGithubRole(pid, 'eggforcer'),
@@ -936,6 +942,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             .ss-report-tag-eggforcer { color: #fff !important; background: #71368a !important; }
             .ss-report-tag-nametag { color: #fff !important; background: #0c576f !important; }
             .ss-report-tag-wizard { color: #fff !important; background: #3498db !important; }
+            .ss-report-tag-archwizard { color: #fff !important; background: #206694 !important; }
+            .ss-report-tag-leaguemod { color: #fff !important; background: #05800c !important; }
             #reportInfoPopup .ss-report-user-tags .ss-report-tag.ss-report-tag-script-dev,
             #custom-reports-panel .ss-report-log-tags .ss-report-tag.ss-report-tag-script-dev { color: #c2fbbf !important; background: #000 !important; box-shadow: none !important; }
             #custom-reports-panel .ss-report-log-tags { flex-wrap: wrap; }
@@ -1098,13 +1106,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 'report_popup_title', 'report_popup_recent', 'report_popup_server', 'report_popup_time',
                 'report_popup_pid_value', 'report_popup_reporter_name', 'report_popup_reporter_id', 'report_popup_reporter_id_line',
                 'report_popup_reason', 'report_popup_success',
-                'report_popup_user_tags', 'report_popup_name_label', 'report_popup_name_tag_wrap', 'report_popup_script_dev_label', 'report_popup_ccmod_label', 'report_popup_excc_label', 'report_popup_mod_label', 'report_popup_league_label', 'report_popup_eggforcer_label', 'report_popup_wizard_label', 'report_popup_cheater_label',
+                'report_popup_user_tags', 'report_popup_name_label', 'report_popup_name_tag_wrap', 'report_popup_script_dev_label', 'report_popup_ccmod_label', 'report_popup_excc_label', 'report_popup_mod_label', 'report_popup_leaguemod_label', 'report_popup_league_label', 'report_popup_eggforcer_label', 'report_popup_wizard_label', 'report_popup_archwizard_label', 'report_popup_cheater_label',
                 'report_popup_toxic_label', 'report_popup_bot_label',
                 'report_popup_creator_label', 'report_popup_member_label',
                 'report_popup_reporter_tags', 'report_popup_reporter_name_label', 'report_popup_reporter_name_tag_wrap', 'report_popup_reporter_wizard_label', 'report_popup_reporter_cheater_label',
                 'report_popup_reporter_toxic_label', 'report_popup_reporter_bot_label',
                 'report_popup_reporter_creator_label', 'report_popup_reporter_member_label',
-                'report_popup_reporter_eggforcer_label', 'report_popup_reporter_script_dev_label', 'report_popup_reporter_ccmod_label', 'report_popup_reporter_excc_label', 'report_popup_reporter_mod_label', 'report_popup_reporter_league_label',
+                'report_popup_reporter_eggforcer_label', 'report_popup_reporter_script_dev_label', 'report_popup_reporter_ccmod_label', 'report_popup_reporter_excc_label', 'report_popup_reporter_mod_label', 'report_popup_reporter_leaguemod_label', 'report_popup_reporter_league_label', 'report_popup_reporter_archwizard_label',
                 'report_popup_join_btn', 'report_popup_observe_btn',
                 'closeReportPopupBtn'
             ];
@@ -1131,7 +1139,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                             <span id="report_popup_script_dev_label" class="ss-report-tag ss-report-tag-script-dev" style="display: none;">SCRIPT DEV</span>
                             <span id="report_popup_ccmod_label" class="ss-report-tag ss-report-tag-ccmod" style="display: none;">CONTENT CREATOR MOD</span>
                             <span id="report_popup_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
+                            <span id="report_popup_archwizard_label" class="ss-report-tag ss-report-tag-archwizard" style="display: none;">ARCHWIZARD</span>
                             <span id="report_popup_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">COMMUNITY MOD</span>
+                            <span id="report_popup_leaguemod_label" class="ss-report-tag ss-report-tag-leaguemod" style="display: none;">LEAGUE MOD</span>
                             <span id="report_popup_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
                             <span id="report_popup_league_label" class="ss-report-tag ss-report-tag-league" style="display: none;">LEAGUE REP</span>
                             <span id="report_popup_cheater_label" class="ss-report-tag ss-report-tag-cheater" style="display: none;">CHEATER</span>
@@ -1159,6 +1169,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                                 <span id="report_popup_reporter_script_dev_label" class="ss-report-tag ss-report-tag-script-dev" style="display: none;">SCRIPT DEV</span>
                                 <span id="report_popup_reporter_ccmod_label" class="ss-report-tag ss-report-tag-ccmod" style="display: none;">CONTENT CREATOR MOD</span>
                                 <span id="report_popup_reporter_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
+                                <span id="report_popup_reporter_archwizard_label" class="ss-report-tag ss-report-tag-archwizard" style="display: none;">ARCHWIZARD</span>
                                 <span id="report_popup_reporter_cheater_label" class="ss-report-tag ss-report-tag-cheater" style="display: none;">CHEATER</span>
                                 <span id="report_popup_reporter_toxic_label" class="ss-report-tag ss-report-tag-toxic" style="display: none;">TOXIC</span>
                                 <span id="report_popup_reporter_bot_label" class="ss-report-tag ss-report-tag-bot" style="display: none;">BOT</span>
@@ -1166,6 +1177,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                                 <span id="report_popup_reporter_excc_label" class="ss-report-tag ss-report-tag-excc" style="display: none;">EX CONTENT CREATOR</span>
                                 <span id="report_popup_reporter_member_label" class="ss-report-tag ss-report-tag-member" style="display: none;">BWD MEMBER</span>
                                 <span id="report_popup_reporter_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">COMMUNITY MOD</span>
+                                <span id="report_popup_reporter_leaguemod_label" class="ss-report-tag ss-report-tag-leaguemod" style="display: none;">LEAGUE MOD</span>
                                 <span id="report_popup_reporter_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
                                 <span id="report_popup_reporter_league_label" class="ss-report-tag ss-report-tag-league" style="display: none;">LEAGUE REP</span>
                             </div>
@@ -1558,6 +1570,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const isExCc = hasGithubRole(report.pid, 'excc');
                 const isCommunityMod = hasGithubRole(report.pid, 'mod');
                 const isLeagueRep = hasGithubRole(report.pid, 'league');
+                const isLeagueMod = hasGithubRole(report.pid, 'leaguemod');
+                const isArchwizard = hasGithubRole(report.pid, 'archwizard');
                 const isMember = isBwdMemberPlayer(report.pid);
                 const isEggforcer = hasGithubRole(report.pid, 'eggforcer');
                 const isWizard = isWizardPlayer(report.pid);
@@ -1573,6 +1587,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     excc: isExCc ? '<span class="ss-report-tag ss-report-tag-excc">EX CC</span>' : '',
                     mod: isCommunityMod ? '<span class="ss-report-tag ss-report-tag-mod">MOD</span>' : '',
                     league: isLeagueRep ? '<span class="ss-report-tag ss-report-tag-league">LEAGUE</span>' : '',
+                    leaguemod: isLeagueMod ? '<span class="ss-report-tag ss-report-tag-leaguemod">LEAGUE MOD</span>' : '',
+                    archwizard: isArchwizard ? '<span class="ss-report-tag ss-report-tag-archwizard">ARCHWIZARD</span>' : '',
                     wizard: isWizard ? '<span class="ss-report-tag ss-report-tag-wizard">WIZARD</span>' : '',
                     eggforcer: isEggforcer ? '<span class="ss-report-tag ss-report-tag-eggforcer">EGGFORCER</span>' : '',
                     cc: isCreator ? '<span class="ss-report-tag ss-report-tag-creator">CC</span>' : '',
@@ -1714,6 +1730,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     const showExCc = hasGithubRole(report.pid, 'excc');
                     const showCommunityMod = hasGithubRole(report.pid, 'mod');
                     const showLeagueRep = hasGithubRole(report.pid, 'league');
+                    const showLeagueMod = hasGithubRole(report.pid, 'leaguemod');
+                    const showArchwizard = hasGithubRole(report.pid, 'archwizard');
                     const showMember = isBwdMemberPlayer(report.pid);
                     const showEggforcer = hasGithubRole(report.pid, 'eggforcer');
                     const showWizard = isWizardPlayer(report.pid);
@@ -1728,6 +1746,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     const exCcLabel = popup.querySelector('#report_popup_excc_label');
                     const communityModLabel = popup.querySelector('#report_popup_mod_label');
                     const leagueRepLabel = popup.querySelector('#report_popup_league_label');
+                    const leagueModLabel = popup.querySelector('#report_popup_leaguemod_label');
+                    const archwizardLabel = popup.querySelector('#report_popup_archwizard_label');
                     if (nameLabelEl) { nameLabelEl.textContent = nameTag; nameLabelEl.style.display = nameTag ? 'inline-block' : 'none'; }
                     if (nameTagWrap) nameTagWrap.style.display = nameTag ? 'flex' : 'none';
                     if (eggforcerLabel) eggforcerLabel.style.display = showEggforcer ? 'inline-block' : 'none';
@@ -1737,7 +1757,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     if (exCcLabel) exCcLabel.style.display = showExCc ? 'inline-block' : 'none';
                     if (communityModLabel) communityModLabel.style.display = showCommunityMod ? 'inline-block' : 'none';
                     if (leagueRepLabel) leagueRepLabel.style.display = showLeagueRep ? 'inline-block' : 'none';
-                    userTags.style.display = showCheater || showToxic || showBot || showCreator || showMember || showEggforcer || showWizard || showScriptDev || showCcMod || showExCc || showCommunityMod || showLeagueRep ? 'flex' : 'none';
+                    if (leagueModLabel) leagueModLabel.style.display = showLeagueMod ? 'inline-block' : 'none';
+                    if (archwizardLabel) archwizardLabel.style.display = showArchwizard ? 'inline-block' : 'none';
+                    userTags.style.display = showCheater || showToxic || showBot || showCreator || showMember || showEggforcer || showWizard || showScriptDev || showCcMod || showExCc || showCommunityMod || showLeagueRep || showLeagueMod || showArchwizard ? 'flex' : 'none';
                     cheaterLabel.style.display = showCheater ? 'inline-block' : 'none';
                     if (showCheater) cheaterLabel.textContent = nameLabel;
                     toxicLabel.style.display = showToxic ? 'inline-block' : 'none';
@@ -1775,6 +1797,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     const reporterExCc = hasGithubRole(reporterPlayerId, 'excc');
                     const reporterCommunityMod = hasGithubRole(reporterPlayerId, 'mod');
                     const reporterLeagueRep = hasGithubRole(reporterPlayerId, 'league');
+                    const reporterLeagueMod = hasGithubRole(reporterPlayerId, 'leaguemod');
+                    const reporterArchwizard = hasGithubRole(reporterPlayerId, 'archwizard');
                     const reporterMember = isBwdMemberPlayer(reporterPlayerId);
                     const reporterEggforcer = hasGithubRole(reporterPlayerId, 'eggforcer');
                     const reporterWizard = isWizardPlayer(reporterPlayerId);
@@ -1788,6 +1812,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     const reporterExCcLabel = popup.querySelector('#report_popup_reporter_excc_label');
                     const reporterCommunityModLabel = popup.querySelector('#report_popup_reporter_mod_label');
                     const reporterLeagueRepLabel = popup.querySelector('#report_popup_reporter_league_label');
+                    const reporterLeagueModLabel = popup.querySelector('#report_popup_reporter_leaguemod_label');
+                    const reporterArchwizardLabel = popup.querySelector('#report_popup_reporter_archwizard_label');
                     if (reporterNameTagLabel) { reporterNameTagLabel.textContent = reporterNameTag; reporterNameTagLabel.style.display = reporterNameTag ? 'inline-block' : 'none'; }
                     if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameTag ? 'flex' : 'none';
                     if (reporterWizardLabel) reporterWizardLabel.style.display = reporterWizard ? 'inline-block' : 'none';
@@ -1796,7 +1822,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     if (reporterExCcLabel) reporterExCcLabel.style.display = reporterExCc ? 'inline-block' : 'none';
                     if (reporterCommunityModLabel) reporterCommunityModLabel.style.display = reporterCommunityMod ? 'inline-block' : 'none';
                     if (reporterLeagueRepLabel) reporterLeagueRepLabel.style.display = reporterLeagueRep ? 'inline-block' : 'none';
-                    reporterTags.style.display = reporterCheater || reporterToxic || reporterBot || reporterCreator || reporterMember || reporterEggforcer || reporterWizard || reporterScriptDev || reporterCcMod || reporterExCc || reporterCommunityMod || reporterLeagueRep ? 'flex' : 'none';
+                    if (reporterLeagueModLabel) reporterLeagueModLabel.style.display = reporterLeagueMod ? 'inline-block' : 'none';
+                    if (reporterArchwizardLabel) reporterArchwizardLabel.style.display = reporterArchwizard ? 'inline-block' : 'none';
+                    reporterTags.style.display = reporterCheater || reporterToxic || reporterBot || reporterCreator || reporterMember || reporterEggforcer || reporterWizard || reporterScriptDev || reporterCcMod || reporterExCc || reporterCommunityMod || reporterLeagueRep || reporterLeagueMod || reporterArchwizard ? 'flex' : 'none';
                     reporterCheaterLabel.style.display = reporterCheater ? 'inline-block' : 'none';
                     if (reporterCheater) reporterCheaterLabel.textContent = reporterNameLabel;
                     reporterToxicLabel.style.display = reporterToxic ? 'inline-block' : 'none';
