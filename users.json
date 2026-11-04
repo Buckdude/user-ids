@@ -111,6 +111,7 @@
       "tags": [
         "ccmod",
         "eggforcer",
+        "league_rep",
         "member"
       ]
     },
@@ -119,8 +120,11 @@
       "nickname": "Sharkbucks",
       "tags": [
         "developer",
+        "mod",
         "eggforcer",
+        "league_rep",
         "cc",
+        "ex_cc",
         "member"
       ]
     },
@@ -129,6 +133,7 @@
       "nickname": "Arendi",
       "tags": [
         "eggforcer",
+        "league_rep",
         "member"
       ]
     },
@@ -193,6 +198,7 @@
       "nickname": "",
       "tags": [
         "eggforcer",
+        "league_rep",
         "member"
       ]
     },
