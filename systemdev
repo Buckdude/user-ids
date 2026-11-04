@@ -1307,7 +1307,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         let reportPopupSizeState = null;
-        let reportPopupInitialZoom = null;
         let reportPopupReasonCount = 1;
         let reportPopupReasonRequiredWidth = 0;
         const lockedReportPopupContents = new WeakSet();
@@ -1371,37 +1370,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
         }
 
-        function getReportPopupContentWidth(popup) {
-            let width = 245;
-            for (const selector of ['#report_popup_user_tags', '#report_popup_reporter_tags']) {
-                const tags = popup.querySelector(selector);
-                if (!tags || tags.style.display === 'none') continue;
-                let rowWidth = 0;
-                let tagsInRow = 0;
-                for (const tag of tags.children) {
-                    if (tag.classList.contains('ss-report-tag-row-break')) {
-                        width = Math.max(width, rowWidth + 32);
-                        rowWidth = 0;
-                        tagsInRow = 0;
-                    } else if (tag.style.display !== 'none') {
-                        rowWidth += tag.offsetWidth + (tagsInRow ? 6 : 0);
-                        tagsInRow++;
-                    }
-                }
-                width = Math.max(width, rowWidth + 32);
-            }
-            for (const element of popup.querySelectorAll('.ss-report-popup-buttons button, #report_popup_server, #report_popup_time, #report_popup_reporter, #report_popup_name_label')) {
-                if (element.style.display !== 'none') width = Math.max(width, element.offsetWidth + 32);
-            }
-            const actions = popup.querySelector('.ss-report-popup-quick');
-            if (actions) {
-                const items = Array.from(actions.children);
-                const actionsWidth = items.reduce((total, item) => total + item.offsetWidth, 0) + Math.max(0, items.length - 1) * 6;
-                width = Math.max(width, actionsWidth + 32);
-            }
-            return width;
-        }
-
         function keepReportPopupSize() {
             const popup = document.getElementById('reportInfoPopup');
             if (!popup || popup.style.display === 'none') return;
@@ -1415,10 +1383,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const matrix = computed.transform.match(/^matrix\(([^)]+)\)$/);
                 const values = matrix ? matrix[1].split(',').map(Number) : [];
                 const originalScale = values.length === 6 ? Math.hypot(values[0], values[1]) : 1;
-                if (reportPopupInitialZoom === null) reportPopupInitialZoom = getReportPopupZoom();
                 reportPopupSizeState = {
                     popup,
-                    zoom: reportPopupInitialZoom,
+                    zoom: getReportPopupZoom(),
                     width,
                     x: (bounds.left + bounds.width / 2) / window.innerWidth * 100,
                     y: (bounds.top + bounds.height / 2) / window.innerHeight * 100,
@@ -1444,8 +1411,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
             const visualScale = Math.max(0.01, original.scale * scale);
             const maximumWidth = Math.max(1, (window.innerWidth - 24) / visualScale);
-            const contentWidth = getReportPopupContentWidth(popup);
-            const normalWidth = reportPopupReasonCount >= 4 ? original.width : contentWidth;
+            const normalWidth = original.width * (reportPopupReasonCount >= 4 ? 1 : 0.92);
             let wantedWidth = Math.min(maximumWidth, Math.max(normalWidth, reportPopupReasonRequiredWidth));
             popup.style.width = `${wantedWidth}px`;
             popup.style.maxWidth = `${wantedWidth}px`;
@@ -1978,12 +1944,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     return width ? asideWrap.getBoundingClientRect().width / width : 1;
                 };
                 let lastReportUnit = null;
-                const initialBrowserZoom = window.outerWidth > 0 && window.innerWidth > 0
-                    ? window.outerWidth / window.innerWidth
-                    : window.devicePixelRatio || 1;
-                const initialDevicePixelRatio = window.devicePixelRatio || 1;
                 const keepReportTextSize = () => {
-                    const browserZoom = initialBrowserZoom * ((window.devicePixelRatio || 1) / initialDevicePixelRatio);
+                    const browserZoom = window.outerWidth > 0 && window.innerWidth > 0
+                        ? window.outerWidth / window.innerWidth
+                        : window.devicePixelRatio || 1;
                     const viewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
                     const scale = browserZoom * viewportScale * parentVisualScale();
                     if (!Number.isFinite(scale) || scale <= 0) return;
