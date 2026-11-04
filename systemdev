@@ -1342,6 +1342,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             lockedReportPopupContents.add(popup);
         }
 
+        // Fixed popup size: 110% of the original UI, independent of later browser zoom changes.
+        const REPORT_POPUP_UI_ZOOM = 1.10;
+
         function getReportPopupZoom() {
             const browserZoom = window.devicePixelRatio || 1;
             const viewportZoom = window.visualViewport?.scale || 1;
@@ -1382,7 +1385,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
 
             const original = reportPopupSizeState;
-            const scale = original.zoom / getReportPopupZoom();
+            const scale = (original.zoom / getReportPopupZoom()) * REPORT_POPUP_UI_ZOOM;
             const body = popup.querySelector('.ss-report-popup-body');
             if (body) {
                 body.style.width = reportPopupReasonCount >= 4 ? '100%' : '';
