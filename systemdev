@@ -1570,10 +1570,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                                 <i class="fas fa-info-circle text_blue4" style="font-size: 0.8em; margin-right: 4px;"></i>${originalReportName}
                             </h4>
                             ${otherModActionReactions.length ? '</div>' : ''}
-                            <p class="nospace text_yellow_bright font-nunito ss-report-server-line" style="font-size: 0.75em; color: #fffc00 !important;">
-                                <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span>` : reporterNameTagMarkup}
+                            <p class="nospace text_yellow_bright font-nunito ss-report-server-line" style="font-size: 0.75em; color: #fffc00 !important;${recentText && reporterNameTagMarkup ? ' align-items: flex-end;' : ''}">
+                                <span class="ss-report-server-code">${report.server}</span>${recentText && reporterNameTagMarkup ? `<span class="ss-report-recent-stack" style="display: inline-flex; flex-direction: column; align-items: center; gap: 3px;">${reporterNameTagMarkup}<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span></span>` : recentText ? `<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span>` : reporterNameTagMarkup}
                             </p>
-                            ${recentText && reporterNameTagMarkup ? `<div class="ss-report-reporter-tag-line" style="display: flex; align-items: center; margin-top: 3px;">${reporterNameTagMarkup}</div>` : ''}
                             ${reportsView === 'action' && reportClock ? `<span class="ss-report-clock">${reportClock}</span>` : ''}
                         </div>
                         <div class="ss-report-actions${reportsView === 'action' ? ' ss-action-taken-actions' : ''}" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;">
