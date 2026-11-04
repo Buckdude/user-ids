@@ -930,6 +930,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 padding: calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit));
                 border-radius: calc(4 * var(--ss-report-unit)); white-space: nowrap;
             }
+            #custom-reports-panel .ss-report-reporter-nametag {
+                display: inline-block; color: #fff !important;
+                font-size: calc(9 * var(--ss-report-unit)) !important;
+                font-weight: 900; line-height: 1.2;
+                padding: calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit));
+                border-radius: calc(4 * var(--ss-report-unit)); white-space: nowrap;
+            }
             #report_popup_observe_btn .ss-observer-main { display: block; }
 
 
@@ -1527,6 +1534,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const isWizard = isWizardPlayer(report.pid);
                 const isScriptDev = isScriptDevPlayer(report.pid);
                 const githubNameTag = getGithubNameTag(report.pid);
+                const reporterIdMatch = String(report.reporter ?? '').match(/\[(\d+)\]\s*$/);
+                const reporterGithubNameTag = reporterIdMatch ? getGithubNameTag(reporterIdMatch[1]) : '';
+                const reporterNameTagMarkup = reporterGithubNameTag
+                    ? `<span class="ss-report-tag ss-report-tag-nametag ss-report-reporter-nametag">${escapeGithubTag(reporterGithubNameTag)}</span>` : '';
                 const logBadgeHtmlByKey = {
                     script_dev: isScriptDev ? '<span class="ss-report-tag ss-report-tag-script-dev">DEV</span>' : '',
                     ccmod: isCcMod ? '<span class="ss-report-tag ss-report-tag-ccmod">CC MOD</span>' : '',
@@ -1560,8 +1571,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                             </h4>
                             ${otherModActionReactions.length ? '</div>' : ''}
                             <p class="nospace text_yellow_bright font-nunito ss-report-server-line" style="font-size: 0.75em; color: #fffc00 !important;">
-                                <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span>` : ''}
+                                <span class="ss-report-server-code">${report.server}</span>${recentText ? `<span class="ss-report-recent-badge" style="color: #fff !important; background: ${recentColor};">${recentText}</span>` : reporterNameTagMarkup}
                             </p>
+                            ${recentText && reporterNameTagMarkup ? `<div class="ss-report-reporter-tag-line" style="display: flex; align-items: center; margin-top: 3px;">${reporterNameTagMarkup}</div>` : ''}
                             ${reportsView === 'action' && reportClock ? `<span class="ss-report-clock">${reportClock}</span>` : ''}
                         </div>
                         <div class="ss-report-actions${reportsView === 'action' ? ' ss-action-taken-actions' : ''}" style="display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;">
