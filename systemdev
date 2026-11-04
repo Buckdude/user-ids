@@ -1307,6 +1307,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         let reportPopupSizeState = null;
+        let reportPopupInitialZoom = null;
         let reportPopupReasonCount = 1;
         let reportPopupReasonRequiredWidth = 0;
         const lockedReportPopupContents = new WeakSet();
@@ -1414,9 +1415,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const matrix = computed.transform.match(/^matrix\(([^)]+)\)$/);
                 const values = matrix ? matrix[1].split(',').map(Number) : [];
                 const originalScale = values.length === 6 ? Math.hypot(values[0], values[1]) : 1;
+                if (reportPopupInitialZoom === null) reportPopupInitialZoom = getReportPopupZoom();
                 reportPopupSizeState = {
                     popup,
-                    zoom: getReportPopupZoom(),
+                    zoom: reportPopupInitialZoom,
                     width,
                     x: (bounds.left + bounds.width / 2) / window.innerWidth * 100,
                     y: (bounds.top + bounds.height / 2) / window.innerHeight * 100,
@@ -1434,7 +1436,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
 
             const original = reportPopupSizeState;
-            const scale = 1;
+            const scale = original.zoom / getReportPopupZoom();
             const body = popup.querySelector('.ss-report-popup-body');
             if (body) {
                 body.style.width = reportPopupReasonCount >= 4 ? '100%' : '';
@@ -1976,8 +1978,12 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     return width ? asideWrap.getBoundingClientRect().width / width : 1;
                 };
                 let lastReportUnit = null;
+                const initialBrowserZoom = window.outerWidth > 0 && window.innerWidth > 0
+                    ? window.outerWidth / window.innerWidth
+                    : window.devicePixelRatio || 1;
+                const initialDevicePixelRatio = window.devicePixelRatio || 1;
                 const keepReportTextSize = () => {
-                    const browserZoom = window.devicePixelRatio || 1;
+                    const browserZoom = initialBrowserZoom * ((window.devicePixelRatio || 1) / initialDevicePixelRatio);
                     const viewportScale = window.visualViewport ? (window.visualViewport.scale || 1) : 1;
                     const scale = browserZoom * viewportScale * parentVisualScale();
                     if (!Number.isFinite(scale) || scale <= 0) return;
