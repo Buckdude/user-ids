@@ -286,7 +286,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (existingScriptDevIndex !== -1) order.splice(existingScriptDevIndex, 1);
             order.unshift('script_dev');
             // Keep other tag priorities unchanged, adding the new roles beside their requested tags.
-            for (const [key, anchor, position] of [['mod', 'eggforcer', 'before'], ['league', 'eggforcer', 'before'], ['excc', 'cc', 'before'], ['archwizard', 'wizard', 'after'], ['leaguemod', 'mod', 'after']]) {
+            for (const [key, anchor, position] of [['mod', 'eggforcer', 'before'], ['leaguemod', 'eggforcer', 'after'], ['league', 'leaguemod', 'after'], ['excc', 'cc', 'before'], ['archwizard', 'wizard', 'after']]) {
                 const from = order.indexOf(key);
                 if (from !== -1) order.splice(from, 1);
                 const at = order.indexOf(anchor);
@@ -307,6 +307,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 creator_label: 'cc', member_label: 'member', wizard_label: 'wizard',
                 cheater_label: 'cheater', toxic_label: 'toxic', bot_label: 'bot'
             };
+            tagsElement.querySelectorAll(':scope > .ss-report-tag-row-break').forEach(element => element.remove());
             const children = Array.from(tagsElement.children);
             const keyOf = element => {
                 const suffix = Object.keys(suffixToKey).find(s => element.id.endsWith(s));
@@ -314,6 +315,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             };
             children.sort((a, b) => order.indexOf(keyOf(a)) - order.indexOf(keyOf(b)));
             children.forEach(element => tagsElement.appendChild(element));
+            if (!['report_popup_user_tags', 'report_popup_reporter_tags'].includes(tagsElement.id)) return;
+            const visibleTags = children.filter(element => element.style.display !== 'none');
+            let remaining = visibleTags.length;
+            let placed = 0;
+            while (remaining > 3) {
+                const rowSize = remaining === 4 ? 2 : 3;
+                placed += rowSize;
+                const breakElement = document.createElement('span');
+                breakElement.className = 'ss-report-tag-row-break';
+                breakElement.style.cssText = 'flex: 0 0 100%; height: 0; padding: 0; margin: 0; border: 0;';
+                visibleTags[placed - 1].insertAdjacentElement('afterend', breakElement);
+                remaining -= rowSize;
+            }
         }
 
         function escapeGithubTag(value) {
@@ -1140,7 +1154,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                             <span id="report_popup_ccmod_label" class="ss-report-tag ss-report-tag-ccmod" style="display: none;">CONTENT CREATOR MOD</span>
                             <span id="report_popup_wizard_label" class="ss-report-tag ss-report-tag-wizard" style="display: none;">WIZARD</span>
                             <span id="report_popup_archwizard_label" class="ss-report-tag ss-report-tag-archwizard" style="display: none;">ARCHWIZARD</span>
-                            <span id="report_popup_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">COMMUNITY MOD</span>
+                            <span id="report_popup_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">BWD MOD</span>
                             <span id="report_popup_leaguemod_label" class="ss-report-tag ss-report-tag-leaguemod" style="display: none;">LEAGUE MOD</span>
                             <span id="report_popup_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
                             <span id="report_popup_league_label" class="ss-report-tag ss-report-tag-league" style="display: none;">LEAGUE REP</span>
@@ -1176,7 +1190,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                                 <span id="report_popup_reporter_creator_label" class="ss-report-tag ss-report-tag-creator" style="display: none;">CONTENT CREATOR</span>
                                 <span id="report_popup_reporter_excc_label" class="ss-report-tag ss-report-tag-excc" style="display: none;">EX CONTENT CREATOR</span>
                                 <span id="report_popup_reporter_member_label" class="ss-report-tag ss-report-tag-member" style="display: none;">BWD MEMBER</span>
-                                <span id="report_popup_reporter_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">COMMUNITY MOD</span>
+                                <span id="report_popup_reporter_mod_label" class="ss-report-tag ss-report-tag-mod" style="display: none;">BWD MOD</span>
                                 <span id="report_popup_reporter_leaguemod_label" class="ss-report-tag ss-report-tag-leaguemod" style="display: none;">LEAGUE MOD</span>
                                 <span id="report_popup_reporter_eggforcer_label" class="ss-report-tag ss-report-tag-eggforcer" style="display: none;">EGGFORCER</span>
                                 <span id="report_popup_reporter_league_label" class="ss-report-tag ss-report-tag-league" style="display: none;">LEAGUE REP</span>
