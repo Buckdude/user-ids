@@ -281,8 +281,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const values = line.split('|').map(value => value.trim());
                 if (values.length < 5 || values.length > 9) throw new Error('Tag must have 5 to 9 fields: ' + line);
                 while (values.length < 9) values.push('');
-                const [key, popupName, logName, textColor, backgroundColor, rawAction, clickValue, flashField, flashSeconds] = values;
-                const clickAction = rawAction.toLowerCase();
+                const [key, popupName, logName, textColor, backgroundColor, rawAction, rawClickValue, flashField, flashSeconds] = values;
+                const directUrl = /^https?:\/\//i.test(rawAction);
+                const valueUrl = !rawAction && /^https?:\/\//i.test(rawClickValue);
+                const clickAction = directUrl || valueUrl ? 'link' : rawAction.toLowerCase();
+                const clickValue = directUrl ? rawAction : rawClickValue;
                 if (!/^[a-z][a-z0-9_]*$/.test(key)) throw new Error('Invalid tag key: ' + key);
                 if (used.has(key)) throw new Error('Duplicate tag key: ' + key);
                 if (!popupName || !logName || popupName.length > 80 || logName.length > 80)
@@ -296,6 +299,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     throw new Error('Invalid hex color: ' + key);
                 if (!['', 'none', 'link', 'copy', 'copyid', 'switch'].includes(clickAction))
                     throw new Error('Unknown click action for ' + key + ': ' + clickAction);
+                if (directUrl && rawClickValue) throw new Error('Put the URL in CLICK or VALUE, not both: ' + key);
                 if (clickValue.length > 600) throw new Error('Click value too long: ' + key);
                 if (clickAction === 'link' && clickValue) {
                     try {
