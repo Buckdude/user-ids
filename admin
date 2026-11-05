@@ -7,6 +7,5 @@
   "GITHUB_TOXIC_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/main/toxic",
   "GITHUB_BWD_MEMBER_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/bwd.member",
   "GITHUB_STAFF_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/staff",
-  "GITHUB_PRIVATE_TAGS_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/main/users.json",
   "GITHUB_REPORT_TAGS_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/tags"
 }
