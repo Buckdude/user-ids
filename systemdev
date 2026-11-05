@@ -197,26 +197,42 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (!data || !data.players || typeof data.players !== 'object' || Array.isArray(data.players))
                 throw new Error('Expected verified JSON with a players object');
             const next = new Map();
+            const validHex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
             for (const [pid, entry] of Object.entries(data.players)) {
                 if (!/^\d+$/.test(pid) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
                 const color = String(entry.text_color ?? entry.textColor ?? '').trim();
                 const background = String(entry.background_color ?? entry.backgroundColor ?? '').trim();
-                const rawLink = String(entry.link ?? '').trim();
-                const validHex = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
                 if ((color && !validHex.test(color)) || (background && !validHex.test(background)))
                     throw new Error('Invalid verified name color for player ' + pid);
+                const linkSpecified = Object.prototype.hasOwnProperty.call(entry, 'link');
+                const rawLink = typeof entry.link === 'string' ? entry.link.trim() : '';
                 let link = '';
                 if (rawLink) {
                     const url = new URL(rawLink);
                     if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Invalid verified link for ' + pid);
                     link = url.href;
                 }
-                next.set(pid, { textColor: color, backgroundColor: background, link });
+                const rawDiscordId = String(entry.discord_id ?? entry.discordId ?? '').trim();
+                const discordId = /^\d+$/.test(rawDiscordId) ? rawDiscordId : '';
+                const tags = Array.isArray(entry.tags)
+                    ? entry.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim().toLowerCase()).filter(Boolean)
+                    : [];
+                next.set(pid, {
+                    name: typeof entry.name === 'string' ? entry.name.trim() : '',
+                    nickname: typeof entry.nickname === 'string' ? entry.nickname.trim() : '',
+                    hasName: Object.prototype.hasOwnProperty.call(entry, 'name'),
+                    hasNickname: Object.prototype.hasOwnProperty.call(entry, 'nickname'),
+                    discordId, discordIdSpecified: Object.prototype.hasOwnProperty.call(entry, 'discord_id') ||
+                        Object.prototype.hasOwnProperty.call(entry, 'discordId'),
+                    tags, textColor: color, backgroundColor: background, link, linkSpecified
+                });
             }
             const signature = JSON.stringify(Array.from(next.entries()));
             if (signature === githubVerifiedDataSignature) return false;
             githubVerifiedPlayers = next;
             githubVerifiedDataSignature = signature;
+            reportBadgeSwitches.clear();
+            restartReportBadgeFlashes();
             renderReportsList(reportsArray);
             refreshOpenPopupGithubTags();
             return true;
@@ -226,7 +242,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (!githubLinkHub?.GITHUB_VERIFIED_URL) return;
             try {
                 const cached = GM_getValue(getGithubVerifiedCacheKey(), '');
-                if (cached) applyGithubVerifiedNames(JSON.parse(cached));
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    for (const entry of Object.values(data.players || {})) {
+                        if (entry && typeof entry === 'object' && 'link' in entry) entry.link = '';
+                    }
+                    applyGithubVerifiedNames(data);
+                }
             } catch (error) {
                 console.warn('[Reports] Verified names cache invalid:', error);
             }
@@ -242,10 +264,15 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (githubLinkHub?.GITHUB_VERIFIED_URL !== requestedUrl) return;
                 const data = raw.trim() ? JSON.parse(raw) : { players: {} };
                 const changed = applyGithubVerifiedNames(data);
-                if (changed) GM_setValue(getGithubVerifiedCacheKey(), JSON.stringify(data));
+                GM_setValue(getGithubVerifiedCacheKey(), JSON.stringify(data));
             } catch (error) {
-                if (githubLinkHub?.GITHUB_VERIFIED_URL === requestedUrl)
-                    console.warn('[Reports] /verified unavailable or invalid, keeping last valid names:', error.message || error);
+                if (githubLinkHub?.GITHUB_VERIFIED_URL === requestedUrl) {
+                    if (/HTTP 404/.test(String(error.message || error))) {
+                        applyGithubVerifiedNames({ players: {} });
+                        try { GM_setValue(getGithubVerifiedCacheKey(), JSON.stringify({ players: {} })); } catch (_) {}
+                    }
+                    console.warn('[Reports] /verified refresh:', error.message || error);
+                }
             } finally {
                 githubVerifiedLoading = false;
             }
@@ -253,7 +280,21 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
 
         function getGithubPlayer(playerId) {
-            return githubPlayerTags.get(String(playerId ?? '').trim()) || null;
+            const id = String(playerId ?? '').trim();
+            const user = githubPlayerTags.get(id) || null;
+            const verified = githubVerifiedPlayers.get(id) || null;
+            if (!verified) return user;
+            if (!user) return {
+                name: verified.name, nickname: verified.nickname,
+                tags: verified.tags, discordId: verified.discordId, links: Object.create(null)
+            };
+            return {
+                ...user,
+                name: user.name || verified.name,
+                nickname: user.nickname || (user.name ? '' : verified.nickname),
+                discordId: verified.discordIdSpecified ? verified.discordId : user.discordId,
+                tags: user.tags
+            };
         }
 
         function applyGithubPlayerTags(data) {
@@ -299,14 +340,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (!githubLinkHub?.GITHUB_USER_TAGS_URL) return;
             try {
                 const stored = GM_getValue(getGithubTagsCacheKey(), '');
-                if (stored) applyGithubPlayerTags(JSON.parse(stored));
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    for (const entry of Object.values(data.players || {})) {
+                        if (entry && typeof entry === 'object') delete entry.links;
+                    }
+                    applyGithubPlayerTags(data);
+                }
             } catch (error) {
                 console.warn('[Reports] Tag cache invalid:', error);
             }
         }
 
         function getGithubNameTag(playerId) {
-            if (!githubNameTagsEnabled) return '';
             const entry = getGithubPlayer(playerId);
             return entry ? (entry.nickname || entry.name || '') : '';
         }
@@ -322,7 +368,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const aliasLink = tag.key === 'league' ? (links?.leaguerep || '') :
                 tag.key === 'leaguerep' ? (links?.league || '') : '';
             if (!tag.isNameGroup) return exactLink || aliasLink;
-            return exactLink || links?.name || getGithubVerifiedName(playerId)?.link || '';
+            const verified = getGithubVerifiedName(playerId);
+            if (verified?.linkSpecified) return verified.link;
+            return exactLink || links?.name || '';
         }
 
         function hasGithubRole(playerId, role) {
@@ -363,7 +411,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             'cheater | CHEATER | CHEATER | #FFFFFF | #900100',
             'bot | BOT | BOT | #FFFFFF | #900100',
             'toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24',
-            'name | {name} | {name} | #FFFFFF | #0C576F | copyid',
+            'verified | {name} | {name} | #FFFFFF | #AA3377 | 1',
+            'name | {name} | {name} | #FFFFFF | #0C576F | 1',
         ];
         const GITHUB_REPORT_TAGS_CACHE_KEY = 'ss-live-reports-custom-tag-definitions';
         const REPORT_TAGS_REFRESH_MS = 5000;
@@ -381,8 +430,12 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const [key, popupName, logName, textColor, backgroundColor, rawAction, rawClickValue, flashField, flashSeconds] = values;
                 const directUrl = /^https?:\/\//i.test(rawAction);
                 const valueUrl = !rawAction && /^https?:\/\//i.test(rawClickValue);
-                const clickAction = directUrl || valueUrl ? 'link' : rawAction.toLowerCase();
+                const nameModeOff = rawAction === '1';
+                const nameModeToggle = /^2(?:\s*\[name\])?$/i.test(rawAction);
+                const clickAction = directUrl || valueUrl ? 'link' :
+                    (nameModeOff || nameModeToggle ? 'copyid' : rawAction.toLowerCase());
                 const clickValue = directUrl ? rawAction : rawClickValue;
+                const nameToggle = nameModeToggle || rawAction.toLowerCase() === 'switch';
                 if (!/^[a-z][a-z0-9_]*$/.test(key)) throw new Error('Invalid tag key: ' + key);
                 if (used.has(key)) throw new Error('Duplicate tag key: ' + key);
                 if (!popupName || !logName || popupName.length > 80 || logName.length > 80)
@@ -412,7 +465,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (flashColors.length && (!Number.isFinite(flashInterval) || flashInterval < 0.05 || flashInterval > 30))
                     throw new Error('Flash seconds must be from 0.05 to 30: ' + key);
                 parsed.push({ key, popupName, logName, textColor, backgroundColor,
-                    isNameGroup: popupName === '{name}', clickAction, clickValue,
+                    isNameGroup: popupName === '{name}', clickAction, clickValue, nameToggle,
                     flashColors, flashInterval });
                 used.add(key);
             }
@@ -430,19 +483,27 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const playerTags = getGithubPlayer(playerId)?.tags || [];
             const base = reportTagDefinitions.find(tag => tag.isNameGroup && tag.key !== 'name' && playerTags.includes(tag.key)) ||
                 reportTagDefinitions.find(tag => tag.isNameGroup && tag.key === 'name') || null;
-            if (!base) return null;
             const verified = getGithubVerifiedName(playerId);
             if (!verified) return base;
-            return { ...base, textColor: verified.textColor || base.textColor,
-                backgroundColor: verified.backgroundColor || base.backgroundColor };
+            const verifiedTag = reportTagDefinitions.find(tag => tag.key === 'verified' && tag.isNameGroup);
+            const style = verifiedTag || base;
+            if (!style) return null;
+            return { ...style,
+                textColor: verified.textColor || style.textColor,
+                backgroundColor: verified.backgroundColor || style.backgroundColor };
         }
 
         const reportBadgeClickTimers = new WeakMap();
         const reportBadgeSwitches = new Map();
         const reportBadgeFlashStates = new Map();
 
-        function getReportBadgeDefinition(key) {
-            return reportTagDefinitions.find(tag => tag.key === key) || null;
+        function getReportBadgeDefinition(key, playerId = '') {
+            const tag = reportTagDefinitions.find(tag => tag.key === key) || null;
+            if (tag?.isNameGroup || (key === 'name' && getGithubVerifiedName(playerId))) {
+                const style = getReportNameStyle(playerId);
+                if (style?.key === key) return style;
+            }
+            return tag;
         }
 
         function getReportBadgeBackground(tag, playerId = '') {
@@ -455,15 +516,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         function restartReportBadgeFlashes() {
             for (const state of reportBadgeFlashStates.values()) clearInterval(state.timer);
             reportBadgeFlashStates.clear();
-            for (const tag of reportTagDefinitions) {
+            const flashing = reportTagDefinitions.map(tag => ({ tag, key: tag.key }));
+            for (const { tag, key } of flashing) {
                 if (!tag.flashColors.length) continue;
                 const state = { colors: tag.flashColors, index: 0, timer: null };
-                reportBadgeFlashStates.set(tag.key, state);
+                reportBadgeFlashStates.set(key, state);
                 state.timer = setInterval(() => {
                     state.index = (state.index + 1) % state.colors.length;
                     document.querySelectorAll('.ss-report-config-badge').forEach(badge => {
-                        if (badge.dataset.ssTagKey === tag.key)
-                            badge.style.setProperty('background', getReportBadgeBackground(tag, badge.dataset.ssPlayerId), 'important');
+                        const pid = badge.dataset.ssPlayerId;
+                        if (badge.dataset.ssTagKey !== tag.key) return;
+                        const style = tag.isNameGroup ? getReportNameStyle(pid) : tag;
+                        if (style?.key === tag.key)
+                            badge.style.setProperty('background', getReportBadgeBackground(style, pid), 'important');
                     });
                 }, Math.round(tag.flashInterval * 1000));
             }
@@ -471,17 +536,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         function canSwitchReportBadge(tag, playerId) {
             if (!tag) return false;
-            if (tag.clickAction === 'switch' && tag.clickValue.trim()) return true;
-            if (!tag.isNameGroup) return false;
+            if (!tag.isNameGroup) return tag.clickAction === 'switch' && !!tag.clickValue.trim();
+            if (!tag.nameToggle && tag.clickAction !== 'switch') return false;
             const player = getGithubPlayer(playerId);
             const primary = getGithubNameTag(playerId);
-            return !!(player?.name && primary && player.name !== primary);
+            const alternates = tag.clickValue && tag.clickAction === 'switch'
+                ? tag.clickValue.split('~').map(value => value.trim()).filter(Boolean) : [];
+            return !!(alternates.length || (player?.name && primary && player.name !== primary));
         }
 
         function getReportBadgeText(tag, playerId, isPopup) {
             const player = getGithubPlayer(playerId);
             const primary = tag.isNameGroup ? getGithubNameTag(playerId) : (isPopup ? tag.popupName : tag.logName);
-            if (tag.clickAction !== 'switch' && !tag.isNameGroup) return primary;
+            if (!canSwitchReportBadge(tag, playerId)) return primary;
             let alternates = tag.clickAction === 'switch' && tag.clickValue
                 ? tag.clickValue.split('~').map(text => text.trim()).filter(Boolean) : [];
             if (!alternates.length && tag.isNameGroup && player?.name && player.name !== primary) alternates = [player.name];
@@ -505,10 +572,14 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         function getReportBadgeAction(tag, playerId) {
             if (!tag) return '';
             if (getGithubPlayerBadgeLink(playerId, tag)) return 'link';
+            const verified = tag.isNameGroup ? getGithubVerifiedName(playerId) : null;
+            if (verified?.linkSpecified && !verified.link && tag.clickAction === 'link')
+                return getGithubDiscordId(playerId) ? 'copyid' : (canSwitchReportBadge(tag, playerId) ? 'switch' : '');
             if (!tag.clickAction || tag.clickAction === 'none') {
                 if (tag.isNameGroup && getGithubDiscordId(playerId)) return 'copyid';
                 return canSwitchReportBadge(tag, playerId) ? 'switch' : '';
             }
+            if (tag.isNameGroup && tag.clickAction === 'switch' && getGithubDiscordId(playerId)) return 'copyid';
             if (tag.clickAction === 'copyid' && !getGithubDiscordId(playerId))
                 return canSwitchReportBadge(tag, playerId) ? 'switch' : '';
             if (['copy', 'link'].includes(tag.clickAction) && !tag.clickValue)
@@ -589,7 +660,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         function activateReportBadge(badge, event) {
             const playerId = badge.dataset.ssPlayerId || '';
-            const tag = getReportBadgeDefinition(badge.dataset.ssTagKey);
+            const tag = getReportBadgeDefinition(badge.dataset.ssTagKey, playerId);
             if (!tag) return false;
             const action = getReportBadgeAction(tag, playerId);
             if (!action) return false;
@@ -607,19 +678,26 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             return true;
         }
 
-        document.addEventListener('click', event => {
+        const reportBadgeListenerKey = '__SS_LIVE_REPORT_BADGE_LISTENERS__';
+        const oldBadgeListeners = window[reportBadgeListenerKey];
+        if (oldBadgeListeners?.click) document.removeEventListener('click', oldBadgeListeners.click, true);
+        if (oldBadgeListeners?.keydown) document.removeEventListener('keydown', oldBadgeListeners.keydown, true);
+        const reportBadgeClickHandler = event => {
             const badge = event.target?.closest?.('#reportInfoPopup .ss-report-config-badge, #custom-reports-panel .ss-report-config-badge');
             if (!badge) return;
             const acted = activateReportBadge(badge, event);
             if (!acted && badge.classList.contains('ss-report-name-badge')) event.stopPropagation();
-        }, true);
-        document.addEventListener('keydown', event => {
+        };
+        const reportBadgeKeyHandler = event => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             const badge = event.target?.closest?.('#reportInfoPopup .ss-report-config-badge, #custom-reports-panel .ss-report-config-badge');
-            if (!badge || !getReportBadgeAction(getReportBadgeDefinition(badge.dataset.ssTagKey), badge.dataset.ssPlayerId)) return;
+            if (!badge || !getReportBadgeAction(getReportBadgeDefinition(badge.dataset.ssTagKey, badge.dataset.ssPlayerId), badge.dataset.ssPlayerId)) return;
             event.preventDefault();
             activateReportBadge(badge, event);
-        }, true);
+        };
+        document.addEventListener('click', reportBadgeClickHandler, true);
+        document.addEventListener('keydown', reportBadgeKeyHandler, true);
+        window[reportBadgeListenerKey] = { click: reportBadgeClickHandler, keydown: reportBadgeKeyHandler };
 
         function updatePopupNameBadge(badge, playerId) {
             if (!badge) return false;
