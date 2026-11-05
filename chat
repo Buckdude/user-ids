@@ -168,7 +168,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         if (!btn) return;
         btn.style.display = noMoreOlder || !currentOldest ? 'none' : 'block';
         btn.disabled = loadingOlder;
-        btn.textContent = loadingOlder ? 'Loading...' : 'Load older chat';
+        btn.textContent = loadingOlder ? 'Loading...' : '';
     }
     function updateBadge() {
         const icon = panel?.querySelector('#ss-modchat-toggle');
@@ -407,7 +407,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             const older = document.createElement('button');
             older.id = 'ss-modchat-older';
             older.type = 'button';
-            older.textContent = 'Load older chat';
+            older.textContent = '';
             older.addEventListener('click', fetchOlder);
             const messages = document.createElement('div');
             messages.id = 'ss-modchat-messages';
