@@ -412,7 +412,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             const messages = document.createElement('div');
             messages.id = 'ss-modchat-messages';
             messages.setAttribute('role', 'log');
-            messages.setAttribute('aria-label', 'MOD Chat messages');
+            messages.setAttribute('aria-label', 'MOD Messages');
             const info = document.createElement('div');
             info.id = 'ss-modchat-status';
             info.setAttribute('role', 'status');
@@ -421,8 +421,8 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             const input = document.createElement('textarea');
             input.id = 'ss-modchat-input';
             input.rows = 1;
-            input.placeholder = 'Message MOD Chat...';
-            input.setAttribute('aria-label', 'MOD Chat message');
+            input.placeholder = 'Mod Messages...';
+            input.setAttribute('aria-label', 'MOD Message');
             input.addEventListener('keydown', event => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
