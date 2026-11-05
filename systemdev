@@ -441,6 +441,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 tagsEl.style.display = Array.from(tagsEl.children).some(child => child.style.display !== 'none') ? 'flex' : 'none';
             }
             refreshOpenPopupModerationTags();
+            keepReportPopupSize();
         }
         const HUB_REQUIRED_LINK_KEYS = [
             'GITHUB_USER_TAGS_URL', 'GITHUB_WHITELIST_URL',
@@ -1309,34 +1310,120 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         let reportPopupReasonCount = 1;
         let reportPopupReasonRequiredWidth = 0;
 
+        const REPORT_POPUP_UI_SCALE = 1.10;
+        const REPORT_POPUP_REFERENCE_DPR = window.devicePixelRatio || 1;
+        const REPORT_POPUP_REFERENCE_VIEWPORT_SCALE = window.visualViewport?.scale || 1;
+        let reportPopupLayout = null;
+
+        function getReportPopupVisualZoom() {
+            const dpr = window.devicePixelRatio || REPORT_POPUP_REFERENCE_DPR;
+            const viewportScale = window.visualViewport?.scale || 1;
+            const reference = REPORT_POPUP_REFERENCE_DPR * REPORT_POPUP_REFERENCE_VIEWPORT_SCALE;
+            return (Number.isFinite(dpr * viewportScale) && dpr * viewportScale > 0)
+                ? reference / (dpr * viewportScale)
+                : 1;
+        }
+
+        function lockReportPopupElements(popup) {
+            const metricProperties = [
+                'font-size', 'line-height', 'letter-spacing', 'word-spacing',
+                'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+                'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
+                'row-gap', 'column-gap',
+                'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+                'border-top-left-radius', 'border-top-right-radius',
+                'border-bottom-right-radius', 'border-bottom-left-radius'
+            ];
+            const px = /^-?\d+(?:\.\d+)?px$/;
+            for (const element of [popup, ...popup.querySelectorAll('*')]) {
+                const computed = getComputedStyle(element);
+                for (const property of metricProperties) {
+                    const value = computed.getPropertyValue(property).trim();
+                    if (px.test(value)) element.style.setProperty(property, value, 'important');
+                }
+                if (element.matches('button')) {
+                    const width = computed.width.trim();
+                    if (px.test(width) && Number.parseFloat(width) > 0)
+                        element.style.setProperty('width', width, 'important');
+                    for (const property of ['min-width', 'max-width', 'min-height', 'max-height']) {
+                        const value = computed.getPropertyValue(property).trim();
+                        if (px.test(value)) element.style.setProperty(property, value, 'important');
+                    }
+                }
+            }
+        }
+
         function keepReportPopupSize() {
             const popup = document.getElementById('reportInfoPopup');
             if (!popup || popup.style.display === 'none') return;
 
-            popup.style.removeProperty('width');
-            popup.style.removeProperty('max-width');
-            const nativeWidth = Number.parseFloat(getComputedStyle(popup).width);
-            if (!Number.isFinite(nativeWidth) || nativeWidth <= 0) return;
+            if (!reportPopupLayout || reportPopupLayout.popup !== popup) {
+                const nativeWidth = Number.parseFloat(getComputedStyle(popup).width);
+                if (!Number.isFinite(nativeWidth) || nativeWidth <= 0) return;
+                lockReportPopupElements(popup);
+                reportPopupLayout = { popup, nativeWidth };
+            }
 
+            const counterZoom = getReportPopupVisualZoom();
+            const visualScale = REPORT_POPUP_UI_SCALE * counterZoom;
             const body = popup.querySelector('.ss-report-popup-body');
             if (body) {
                 body.style.width = reportPopupReasonCount >= 4 ? '100%' : '';
                 body.style.boxSizing = reportPopupReasonCount >= 4 ? 'border-box' : '';
             }
 
-            const maximumWidth = Math.max(1, window.innerWidth - 24);
-            const normalWidth = nativeWidth * (reportPopupReasonCount >= 4 ? 1 : 0.92);
-            let wantedWidth = Math.min(maximumWidth, Math.max(normalWidth, reportPopupReasonRequiredWidth));
-            popup.style.width = `${wantedWidth}px`;
-            popup.style.maxWidth = `${wantedWidth}px`;
+            const normalWidth = reportPopupLayout.nativeWidth * (reportPopupReasonCount >= 4 ? 1 : 0.92);
+            let width = Math.max(normalWidth, reportPopupReasonRequiredWidth);
+            const tagContainers = popup.querySelectorAll('#report_popup_user_tags, #report_popup_reporter_tags');
+            for (const container of tagContainers) {
+                if (container.style.display === 'none') continue;
+                const rowBreaks = Array.from(container.children);
+                let rowWidth = 0;
+                let widest = 0;
+                for (const tag of rowBreaks) {
+                    if (tag.classList.contains('ss-report-tag-row-break')) {
+                        widest = Math.max(widest, rowWidth);
+                        rowWidth = 0;
+                    } else if (tag.style.display !== 'none') {
+                        const gap = rowWidth ? 6 : 0;
+                        rowWidth += tag.offsetWidth + gap;
+                    }
+                }
+                widest = Math.max(widest, rowWidth);
+                width = Math.max(width, widest + 32);
+            }
+            popup.style.setProperty('width', `${width}px`, 'important');
+            popup.style.setProperty('max-width', `${width}px`, 'important');
 
             const quickActions = popup.querySelector('.ss-report-popup-quick');
             if (quickActions && quickActions.scrollWidth > quickActions.clientWidth) {
-                wantedWidth = Math.min(maximumWidth, wantedWidth + quickActions.scrollWidth - quickActions.clientWidth + 2);
-                popup.style.width = `${wantedWidth}px`;
-                popup.style.maxWidth = `${wantedWidth}px`;
+                width += quickActions.scrollWidth - quickActions.clientWidth + 2;
+                popup.style.setProperty('width', `${width}px`, 'important');
+                popup.style.setProperty('max-width', `${width}px`, 'important');
             }
+
+            popup.style.setProperty('position', 'fixed', 'important');
+            popup.style.setProperty('left', '50%', 'important');
+            popup.style.setProperty('top', '50%', 'important');
+            popup.style.setProperty('right', 'auto', 'important');
+            popup.style.setProperty('bottom', 'auto', 'important');
+            popup.style.setProperty('transform-origin', 'center center', 'important');
+            popup.style.setProperty('transform', `translate(-50%, -50%) scale(${visualScale})`, 'important');
+
+            popup.style.setProperty('max-height', `${Math.max(120, (window.innerHeight - 20) / visualScale)}px`, 'important');
         }
+
+
+        window.addEventListener('resize', keepReportPopupSize);
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', keepReportPopupSize);
+        let lastReportPopupZoom = getReportPopupVisualZoom();
+        setInterval(() => {
+            const nextZoom = getReportPopupVisualZoom();
+            if (Math.abs(nextZoom - lastReportPopupZoom) > 0.0005) {
+                lastReportPopupZoom = nextZoom;
+                keepReportPopupSize();
+            }
+        }, 200);
 
         let reportPopupReasonBaseFontSize = null;
         function fitReportPopupReason(reason) {
