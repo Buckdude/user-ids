@@ -1,1 +1,9 @@
-
+{
+  "players": {
+    "1870222": {
+      "text_color": "#FFFFFF",
+      "background_color": "#AA3377",
+      "link": ""
+    }
+  }
+}
