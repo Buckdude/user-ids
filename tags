@@ -1,1 +1,23 @@
+# TAGS | TOP = FIRST
+# KEY | POPUP | LOG | TEXT HEX | BG HEX
+# ORDER: Move lines.
+# ASSIGN: Use key in user.tags
+# AUTO: member, cheater, bot, toxic.
+# FORMAT: lowercase_key, #HEX colors.
+# REFRESH: 15 seconds.
 
+script_dev | SCRIPT DEV | DEV | #C2FBBF | #000000
+wizard | WIZARD | WIZARD | #FFFFFF | #3498DB
+archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694
+mod | BWD MOD | MOD | #FFFFFF | #0029FF
+eggforcer | EGGFORCER | EGGFORCER | #FFFFFF | #71368A
+exeggforcer | Ex EGGFORCER | Ex EGGFORCER | #FFFFFF | #532766
+leaguemod | LEAGUE MOD | LEAGUE MOD | #FFFFFF | #05800C
+league | LEAGUE REP | LEAGUE | #FFFFFF | #006105
+ccmod | CONTENT CREATOR MOD | CC MOD | #FFFFFF | #9E6BFF
+cc | CONTENT CREATOR | CC | #FFFFFF | #E91E63
+excc | Ex CONTENT CREATOR | Ex CC | #FFFFFF | #AB1045
+member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5
+cheater | CHEATER | CHEATER | #FFFFFF | #900100
+bot | BOT | BOT | #FFFFFF | #900100
+toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24
