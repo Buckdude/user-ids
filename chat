@@ -371,7 +371,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         if (!btn) return;
         btn.style.display = noMoreOlder || !currentOldest ? 'none' : 'block';
         btn.disabled = loadingOlder;
-        btn.textContent = loadingOlder ? 'Loading...' : 'Load older chat';
+        btn.textContent = loadingOlder ? 'loading...' : '';
     }
     function updateBadge() {
         const icon = panel?.querySelector('#ss-modchat-toggle');
@@ -553,30 +553,30 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             #custom-reports-panel.ss-modchat-active #ss-reports-discord-copy {display:none !important;}
             #custom-reports-panel #ss-modchat-older {
                 width:100%; background:transparent; color:#0c576f; border:0; cursor:pointer;
-                font-size:calc(11 * var(--ss-report-unit)); font-weight:700; padding:4px;
+                font-size:calc(10 * var(--ss-report-unit)); font-weight:700; padding:3px; min-height:20px;
             }
             #custom-reports-panel #ss-modchat-messages {
-                display:flex; flex-direction:column; gap:7px; min-height:0; max-height:220px;
-                overflow-y:auto; overflow-x:hidden; padding:9px 8px; box-sizing:border-box;
-                background:#06baf7; font:calc(12 * var(--ss-report-unit))/1.35 Arial,sans-serif;
+                display:flex; flex-direction:column; gap:4px; min-height:0; max-height:170px;
+                overflow-y:auto; overflow-x:hidden; padding:6px 7px; box-sizing:border-box;
+                background:#06baf7; font:calc(10 * var(--ss-report-unit))/1.3 Arial,sans-serif;
                 color:#0c576f; overflow-wrap:anywhere; white-space:pre-wrap;
             }
-            #custom-reports-panel .ss-modchat-message {display:flex; flex-wrap:wrap; gap:4px; align-items:center;}
+            #custom-reports-panel .ss-modchat-message {display:flex; flex-wrap:wrap; gap:3px; align-items:center;}
             #custom-reports-panel .ss-modchat-message strong {font-weight:800;color:#0c576f;}
             #custom-reports-panel .ss-modchat-message .ss-modchat-body {color:#123d54; white-space:pre-wrap;}
-            #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:3px;}
-            #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important;}
-            #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:15px 0;}
+            #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:2px;}
+            #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important; font-size:calc(8 * var(--ss-report-unit)) !important; padding:calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;}
+            #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:10px 0;}
             #custom-reports-panel #ss-modchat-status {
                 display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
             }
-            #custom-reports-panel .ss-modchat-compose {display:block; padding:6px 7px; background:#5d9db2; border-top:1px solid #0c576f55;}
+            #custom-reports-panel .ss-modchat-compose {display:block; padding:3px 6px;}
             #custom-reports-panel #ss-modchat-input.chat.roundme_sm {
                 display:block !important; width:100% !important; min-width:0; box-sizing:border-box;
-                min-height:35px; margin:0; padding:5px 7px; outline:none;
+                min-height:27px; margin:0; padding:4px 6px; outline:none;
                 pointer-events:auto !important; border:0 !important; border-radius:8px;
                 background:transparent !important; color:#ffffff !important;
-                font-family:Nunito,Arial,sans-serif !important; font-size:calc(19 * var(--ss-report-unit)) !important;
+                font-family:Nunito,Arial,sans-serif !important; font-size:calc(14 * var(--ss-report-unit)) !important;
                 font-weight:700 !important; line-height:1.2 !important;
             }
             #custom-reports-panel #ss-modchat-input.chat.roundme_sm::placeholder {color:#fff100 !important; opacity:1;}
@@ -631,7 +631,8 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             const older = document.createElement('button');
             older.id = 'ss-modchat-older';
             older.type = 'button';
-            older.textContent = 'Load older chat';
+            older.textContent = '';
+            older.setAttribute('aria-label', 'Load older chat');
             older.addEventListener('click', fetchOlder);
             const messages = document.createElement('div');
             messages.id = 'ss-modchat-messages';
