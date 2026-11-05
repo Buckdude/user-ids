@@ -8,5 +8,6 @@
   "GITHUB_BWD_MEMBER_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/bwd.member",
   "GITHUB_STAFF_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/staff",
   "GITHUB_REPORT_TAGS_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/tags",
-  "GITHUB_VERIFIED_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/verified"
+  "GITHUB_VERIFIED_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/verified",
+  "GITHUB_CHAT_URL": "https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/chat"
 }
