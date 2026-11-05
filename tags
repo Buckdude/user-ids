@@ -6,7 +6,7 @@
 # FORMAT: lowercase_key, #HEX colors.
 # REFRESH: 15 seconds.
 
-script_dev | SCRIPT DEV | DEV | #C2FBBF | #000000
+dev | SCRIPT DEV | DEV | #C2FBBF | #000000
 wizard | WIZARD | WIZARD | #FFFFFF | #3498DB
 archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694
 mod | BWD MOD | MOD | #FFFFFF | #0029FF
