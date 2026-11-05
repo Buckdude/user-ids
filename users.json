@@ -91,21 +91,21 @@
       "nickname": "Sharkbucks",
       "discord_id": "328065506009415681",
       "tags": ["dev", "eggforcer", "cc", "member"],
-      "links": {"cc": "https://example.com"}
+      "links": {"cc": "https://www.youtube.com/@Sharkbucks"}
     },
     "80757664": {
       "name": "arendi_08",
       "nickname": "Arendi",
       "discord_id": "",
       "tags": ["eggforcer", "leaguerep", "member"],
-      "links": {"leaguerep": "https://example.com"}
+      "links": {"leaguerep": "https://www.youtube.com/@ShellClashComps"}
     },
     "1943513": {
       "name": "kjdcitsme",
       "nickname": "KJDCitsme",
       "discord_id": "",
       "tags": ["eggforcer", "excc", "member"],
-      "links": {"excc": "https://example.com"}
+      "links": {"excc": "https://www.twitch.tv/kjdcitsme"}
     },
     "56280272": {
       "name": "itz_tog",
@@ -128,30 +128,30 @@
     "49154478": {
       "name": "menoxd",
       "nickname": "MenoXD",
-      "discord_id": "",
+      "discord_id": "235389150751096832",
       "tags": ["eggforcer", "excc", "member"],
-      "links": {"excc": "https://example.com"}
+      "links": {"excc": "https://www.twitch.tv/menoXD"}
     },
     "20656368": {
       "name": "bugggsbun",
       "nickname": "",
-      "discord_id": "",
+      "discord_id": "732237021837393990",
       "tags": ["eggforcer", "leaguerep", "member"],
-      "links": {"leaguerep": "https://example.com"}
+      "links": {"leaguerep": "https://discord.com/invite/GwMgkheKBp"}
     },
     "1177994": {
       "name": "polarizedmoon",
       "nickname": "PolarizedMoon",
-      "discord_id": "",
+      "discord_id": "139812792256561153",
       "tags": ["mod", "eggforcer", "excc", "member"],
-      "links": {"excc": "https://example.com"}
+      "links": {"excc": "https://www.youtube.com/@PolarizedMoon"}
     },
     "54867965": {
       "name": "chikon01",
       "nickname": "",
-      "discord_id": "",
+      "discord_id": "781236698193330227",
       "tags": ["eggforcer", "leaguerep", "member"],
-      "links": {"leaguerep": "https://example.com"}
+      "links": {"leaguerep": "https://discord.gg/ByKSnBDzyR"}
     },
     "75059623": {
       "name": "neonegg_yt",
@@ -334,6 +334,7 @@
       "nickname": "",
       "discord_id": "",
       "tags": ["member, excc"]
+      "links": {"excc": "https://www.youtube.com/@thekingmanyt"}
     },
     "36965317": {
       "name": "insomniak03",
