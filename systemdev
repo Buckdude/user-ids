@@ -290,8 +290,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             };
             return {
                 ...user,
-                name: user.name || verified.name,
-                nickname: user.nickname || (user.name ? '' : verified.nickname),
+                name: verified.name || user.name,
+                nickname: verified.nickname || user.nickname,
                 discordId: verified.discordIdSpecified ? verified.discordId : user.discordId,
                 tags: user.tags
             };
@@ -506,10 +506,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             return tag;
         }
 
-        function getReportBadgeBackground(tag, playerId = '') {
+        function getReportBadgeBackground(tag, playerId = '', allowFlash = false) {
             const verifiedColor = tag.isNameGroup ? getGithubVerifiedName(playerId)?.backgroundColor : '';
             if (verifiedColor) return verifiedColor;
-            const state = reportBadgeFlashStates.get(tag.key);
+            const state = allowFlash ? reportBadgeFlashStates.get(tag.key) : null;
             return state ? state.colors[state.index] : tag.backgroundColor;
         }
 
@@ -523,12 +523,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 reportBadgeFlashStates.set(key, state);
                 state.timer = setInterval(() => {
                     state.index = (state.index + 1) % state.colors.length;
-                    document.querySelectorAll('.ss-report-config-badge').forEach(badge => {
+                    if (reportsView !== 'reports') return;
+                    document.querySelectorAll('#ss-reports-list .ss-report-config-badge').forEach(badge => {
                         const pid = badge.dataset.ssPlayerId;
                         if (badge.dataset.ssTagKey !== tag.key) return;
                         const style = tag.isNameGroup ? getReportNameStyle(pid) : tag;
                         if (style?.key === tag.key)
-                            badge.style.setProperty('background', getReportBadgeBackground(style, pid), 'important');
+                            badge.style.setProperty('background', getReportBadgeBackground(style, pid, true), 'important');
                     });
                 }, Math.round(tag.flashInterval * 1000));
             }
@@ -718,7 +719,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const style = getReportNameStyle(playerId);
             if (!getGithubNameTag(playerId) || !style) return '';
             const attrs = getReportBadgeAttributes(style, playerId);
-            return `<span class="ss-report-tag ss-report-tag-nametag ss-report-name-badge ss-report-config-badge${extraClass ? ' ' + extraClass : ''}" style="color: ${style.textColor} !important; background: ${getReportBadgeBackground(style, playerId)} !important;"${attrs}>${escapeGithubTag(getReportBadgeText(style, playerId, false))}</span>`;
+            return `<span class="ss-report-tag ss-report-tag-nametag ss-report-name-badge ss-report-config-badge${extraClass ? ' ' + extraClass : ''}" style="color: ${style.textColor} !important; background: ${getReportBadgeBackground(style, playerId, reportsView === 'reports')} !important;"${attrs}>${escapeGithubTag(getReportBadgeText(style, playerId, false))}</span>`;
         }
 
         function hasReportTag(key, name, playerId) {
@@ -2084,7 +2085,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const reporterNameTagMarkup = reporterIdMatch ? makeLogNameBadge(reporterIdMatch[1], 'ss-report-reporter-nametag') : '';
                 const orderedLogBadges = reportTagDefinitions
                     .filter(tag => !tag.isNameGroup && hasReportTag(tag.key, report.name, report.pid))
-                    .map(tag => `<span class="ss-report-tag ss-report-tag-${tag.key} ss-report-config-badge" style="color: ${tag.textColor} !important; background: ${getReportBadgeBackground(tag, report.pid)} !important;${tag.key === 'script_dev' ? ' box-shadow: none !important;' : ''}"${getReportBadgeAttributes(tag, report.pid)}>${escapeGithubTag(getReportBadgeText(tag, report.pid, false))}</span>`)
+                    .map(tag => `<span class="ss-report-tag ss-report-tag-${tag.key} ss-report-config-badge" style="color: ${tag.textColor} !important; background: ${getReportBadgeBackground(tag, report.pid, reportsView === 'reports')} !important;${tag.key === 'script_dev' ? ' box-shadow: none !important;' : ''}"${getReportBadgeAttributes(tag, report.pid)}>${escapeGithubTag(getReportBadgeText(tag, report.pid, false))}</span>`)
                     .join('');
                 const logBadgeMarkup = `${makeLogNameBadge(report.pid)}${orderedLogBadges}`;
                 const reportRow = document.createElement('div');
