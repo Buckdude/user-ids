@@ -1,11 +1,8 @@
 # KEY | POPUP | LOG | TEXT | BG | CLICK | VALUE | FLASH | SECONDS
-# TOP FIRST. Blank = off. Old 5-column tags work.
-# CLICK: URL auto-opens, copy, copyid, switch.
-# SWITCH: NAME toggles nickname/username, others use VALUE.
-# FLASH: #112233,#445566 | 0.3 sec per color.
-# NAME GROUP: {name}; assign via users.json tags. Click = 20% for 0.2s.
-# EXAMPLE LINK: mod | BWD MOD | MOD | #FFFFFF | #0029FF | https://example.com
-# COPY: copy | text. FLASH: copy | text | #000000,#FF0000 | 0.3
+# NAME: 1 = keep nickname; 2 [name] = toggle nickname/username; ID copies by default.
+# VERIFIED: use /verified player list; shared colors/flash/click from this row.
+# FLASH: #000000,#FF0000 | 0.3 seconds. Blank = off.
+# URLs in CLICK auto-open. Old five-column role tags still work.
 
 dev | SCRIPT DEV | DEV | #C2FBBF | #000000
 wizard | WIZARD | WIZARD | #FFFFFF | #3498DB
@@ -22,4 +19,5 @@ member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5
 cheater | CHEATER | CHEATER | #FFFFFF | #900100
 bot | BOT | BOT | #FFFFFF | #900100
 toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24
-name | {name} | {name} | #FFFFFF | #0C576F | copyid
+verified | {name} | {name} | #FFFFFF | #AA3377 | 1
+name | {name} | {name} | #FFFFFF | #0C576F | 1
