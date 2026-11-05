@@ -1,1 +1,454 @@
+globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
+    'use strict';
 
+    const { channelId, requestAPI, GM_getValue, GM_setValue, getReportsView, refreshReportsHeader } = options;
+    const API = `https://discord.com/api/v9/channels/${channelId}/messages`;
+    const EGG = '🥚';
+    const STATE_KEY = `ss-modchat-${channelId}-read-v1`;
+    const PENDING_KEY = `ss-modchat-${channelId}-pending-egg-v1`;
+    const POLL_MS = 5000;
+    const MAX_HISTORY = 500;
+    const MAX_TRACKED = 1200;
+    const history = new Map();
+    const known = new Set();
+    const unread = new Set();
+    const pendingEgg = new Set();
+    let initialized = false;
+    let open = false;
+    let panel = null;
+    let me = null;
+    let mePromise = null;
+    let fetching = false;
+    let loadingOlder = false;
+    let sending = false;
+    let nextRetry = 0;
+    let currentOldest = '';
+    let noMoreOlder = false;
+
+    try {
+        const saved = JSON.parse(GM_getValue(STATE_KEY, '{}'));
+        initialized = saved.initialized === true;
+        for (const id of saved.known || []) if (/^\d+$/.test(id)) known.add(id);
+        for (const id of saved.unread || []) if (/^\d+$/.test(id)) unread.add(id);
+    } catch (_) {}
+    try {
+        for (const id of JSON.parse(GM_getValue(PENDING_KEY, '[]'))) {
+            if (/^\d+$/.test(id)) pendingEgg.add(id);
+        }
+    } catch (_) {}
+
+    function saveState() {
+        GM_setValue(STATE_KEY, JSON.stringify({
+            initialized,
+            known: [...known].slice(-MAX_TRACKED),
+            unread: [...unread].slice(-MAX_TRACKED)
+        }));
+    }
+    function savePending() { GM_setValue(PENDING_KEY, JSON.stringify([...pendingEgg])); }
+    function newer(a, b) {
+        try { return BigInt(a) > BigInt(b); }
+        catch (_) { return String(a) > String(b); }
+    }
+    function ordered(a, b) {
+        return newer(a, b) ? 1 : newer(b, a) ? -1 : 0;
+    }
+    function isEggMessage(message) {
+        return (message.reactions || []).some(r =>
+            !r.emoji?.id && r.emoji?.name === EGG && Number(r.count) > 0);
+    }
+    function getName(author) {
+        return String(author?.username || author?.global_name || 'Unknown');
+    }
+    function getBody(message) {
+        const content = String(message.content || '').trim();
+        if (content) return content;
+        return (message.embeds || []).map(embed =>
+            [embed.title, embed.description].filter(Boolean).join('\n')).filter(Boolean).join('\n').trim();
+    }
+    function getDisplayedBody(message) {
+        const raw = getBody(message);
+        const name = getName(message.author);
+        return raw.startsWith(`${name}: `) ? raw.slice(name.length + 2) : raw;
+    }
+    function isOwn(message) {
+        return !!(me?.id && message.author?.id === me.id);
+    }
+    function takeMessages(messages, initial = false) {
+        let changed = false;
+        for (const message of messages) {
+            if (!message?.id || !/^\d+$/.test(message.id)) continue;
+            if (!isEggMessage(message) || !getBody(message)) {
+                if (history.delete(message.id)) changed = true;
+                continue;
+            }
+            history.set(message.id, message);
+            if (!known.has(message.id)) {
+                known.add(message.id);
+                changed = true;
+                if (initialized && !initial && !open && !isOwn(message)) unread.add(message.id);
+            }
+        }
+        if (!initialized) { initialized = true; changed = true; }
+        if (open && unread.size) { unread.clear(); changed = true; }
+        if (known.size > MAX_TRACKED) {
+            for (const id of [...known].slice(0, known.size - MAX_TRACKED)) known.delete(id);
+            changed = true;
+        }
+        if (history.size > MAX_HISTORY) {
+            for (const id of [...history.keys()].sort(ordered).slice(0, history.size - MAX_HISTORY)) history.delete(id);
+        }
+        if (changed) saveState();
+        updateBadge();
+        if (open) render();
+    }
+    async function api(method, url, data) {
+        const result = await requestAPI(method, url, data);
+        if (result.status === 429) {
+            let retry = 10;
+            try { retry = Math.max(2, Number(JSON.parse(result.responseText).retry_after) || 10); }
+            catch (_) {}
+            nextRetry = Date.now() + retry * 1000;
+        }
+        return result;
+    }
+    async function fetchLatest(force = false) {
+        if (fetching || (!force && Date.now() < nextRetry)) return;
+        fetching = true;
+        try {
+            const result = await api('GET', `${API}?limit=100`);
+            if (result.status !== 200) {
+                if (open) status(`Discord error ${result.status}.`);
+                return;
+            }
+            const messages = JSON.parse(result.responseText);
+            if (!Array.isArray(messages)) throw new Error('Invalid Discord messages.');
+            if (messages.length) {
+                const oldest = messages[messages.length - 1].id;
+                if (!currentOldest || newer(currentOldest, oldest)) currentOldest = oldest;
+            }
+            takeMessages(messages);
+            if (open) status('');
+        } catch (error) {
+            if (open) status(`Chat unavailable: ${error.message || error}`);
+        } finally {
+            fetching = false;
+        }
+    }
+    async function fetchOlder() {
+        if (loadingOlder || noMoreOlder || !currentOldest || Date.now() < nextRetry) return;
+        loadingOlder = true;
+        updateOlderButton();
+        const previousScroll = document.getElementById('ss-modchat-messages')?.scrollHeight || 0;
+        try {
+            const result = await api('GET', `${API}?limit=100&before=${currentOldest}`);
+            if (result.status !== 200) { status(`Older messages: Discord error ${result.status}.`); return; }
+            const messages = JSON.parse(result.responseText);
+            if (!Array.isArray(messages)) throw new Error('Invalid Discord messages.');
+            if (messages.length < 100) noMoreOlder = true;
+            if (messages.length) {
+                currentOldest = messages[messages.length - 1].id;
+                takeMessages(messages, true);
+                const list = document.getElementById('ss-modchat-messages');
+                if (list) list.scrollTop = Math.max(0, list.scrollHeight - previousScroll);
+            }
+            status('');
+        } catch (error) {
+            status(`Unable to load older messages: ${error.message || error}`);
+        } finally {
+            loadingOlder = false;
+            updateOlderButton();
+        }
+    }
+    function status(value) {
+        const element = panel?.querySelector('#ss-modchat-status');
+        if (element) { element.textContent = value || ''; element.style.display = value ? 'block' : 'none'; }
+    }
+    function updateOlderButton() {
+        const btn = panel?.querySelector('#ss-modchat-older');
+        if (!btn) return;
+        btn.style.display = noMoreOlder || !currentOldest ? 'none' : 'block';
+        btn.disabled = loadingOlder;
+        btn.textContent = loadingOlder ? 'Loading...' : 'Load older chat';
+    }
+    function updateBadge() {
+        const icon = panel?.querySelector('#ss-modchat-toggle');
+        const badge = icon?.querySelector('.ss-modchat-badge');
+        if (!icon || !badge) return;
+        const count = unread.size;
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = count && !open ? 'inline-flex' : 'none';
+        icon.classList.toggle('ss-modchat-unread', count > 0 && !open);
+    }
+    function render() {
+        const list = panel?.querySelector('#ss-modchat-messages');
+        if (!list || !open) return;
+        const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 35;
+        const sorted = [...history.values()].sort((a, b) => ordered(a.id, b.id));
+        if (list.dataset.signature === sorted.map(m => m.id + ':' + m.content + ':' + (m.reactions || []).length).join('|')) return;
+        list.dataset.signature = sorted.map(m => m.id + ':' + m.content + ':' + (m.reactions || []).length).join('|');
+        list.replaceChildren();
+        if (!sorted.length) {
+            const empty = document.createElement('div');
+            empty.className = 'ss-modchat-empty';
+            empty.textContent = 'No 🥚 chat messages found.';
+            list.appendChild(empty);
+        }
+        for (const message of sorted) {
+            const row = document.createElement('div');
+            row.className = 'ss-modchat-message';
+            row.dataset.messageId = message.id;
+            const user = document.createElement('strong');
+            user.textContent = `${getName(message.author)}: `;
+            const body = document.createElement('span');
+            body.textContent = getDisplayedBody(message);
+            row.append(user, body);
+            row.title = message.timestamp ? new Date(message.timestamp).toLocaleString() : '';
+            list.appendChild(row);
+        }
+        if (wasNearBottom) list.scrollTop = list.scrollHeight;
+    }
+    async function getAccount() {
+        if (me) return me;
+        if (mePromise) return mePromise;
+        mePromise = (async () => {
+            const result = await api('GET', 'https://discord.com/api/v9/users/@me');
+            if (result.status !== 200) throw new Error(`Cannot read Discord username (HTTP ${result.status}).`);
+            const user = JSON.parse(result.responseText);
+            if (!user?.id || !user?.username) throw new Error('Discord username missing.');
+            me = user;
+            return user;
+        })();
+        try { return await mePromise; }
+        finally { mePromise = null; }
+    }
+    async function sendMessage() {
+        const field = panel?.querySelector('#ss-modchat-input');
+        const send = panel?.querySelector('#ss-modchat-send');
+        const input = field?.value?.trim() || '';
+        if (sending || !input || !field || !send) return;
+        sending = true;
+        send.disabled = true;
+        try {
+            const user = await getAccount();
+            const content = `${user.username}: ${input}`;
+            if (content.length > 2000) throw new Error('Message is too long (Discord 2,000-character limit).');
+            const result = await api('POST', API, JSON.stringify({
+                content, allowed_mentions: { parse: [] }
+            }));
+            if (result.status !== 200 && result.status !== 201) {
+                throw new Error(`Discord could not send the message (HTTP ${result.status}).`);
+            }
+            const message = JSON.parse(result.responseText);
+            if (!message.id) throw new Error('Message sent, but Discord did not return a message ID.');
+            known.add(message.id);
+            saveState();
+            field.value = '';
+            status('');
+            pendingEgg.add(message.id);
+            savePending();
+            await syncPendingEgg();
+            await fetchLatest(true);
+            if (pendingEgg.has(message.id)) status('Message sent. Retrying 🥚 reaction automatically.');
+        } catch (error) {
+            status(error.message || String(error));
+        } finally {
+            sending = false;
+            send.disabled = false;
+        }
+    }
+    let syncingEgg = false;
+    async function syncPendingEgg() {
+        if (syncingEgg || Date.now() < nextRetry) return;
+        syncingEgg = true;
+        try {
+            for (const id of [...pendingEgg].slice(0, 6)) {
+                try {
+                    const result = await api('PUT', `${API}/${id}/reactions/${encodeURIComponent(EGG)}/@me`);
+                    if (result.status !== 204 && result.status !== 200) break;
+                    pendingEgg.delete(id);
+                    savePending();
+                } catch (error) {
+                    console.warn('[MOD Chat] Egg reaction:', error);
+                    break;
+                }
+            }
+        } finally { syncingEgg = false; }
+    }
+    function markRead() {
+        if (unread.size) { unread.clear(); saveState(); }
+        updateBadge();
+    }
+    function setOpen(next) {
+        if (open === next) return;
+        open = next;
+        if (!panel || !panel.isConnected) { ensureUI(); return; }
+        panel.classList.toggle('ss-modchat-active', open);
+        const heading = panel.querySelector('#ss-reports-view-toggle');
+        if (heading) {
+            heading.textContent = open ? 'MOD Chat' : (getReportsView() === 'action' ? 'Action taken' : 'Reports');
+            heading.classList.toggle('ss-action-view', !open && getReportsView() === 'action');
+            heading.title = open ? 'Return to Reports' : 'Switch between Reports and Action taken';
+        }
+        const toggle = panel.querySelector('#ss-modchat-toggle');
+        toggle?.setAttribute('aria-pressed', String(open));
+        if (open) {
+            markRead();
+            render();
+            fetchLatest(true);
+            updateOlderButton();
+            const list = panel.querySelector('#ss-modchat-messages');
+            if (list) list.scrollTop = list.scrollHeight;
+        } else {
+            refreshReportsHeader?.();
+        }
+        updateBadge();
+    }
+    function ensureStyles() {
+        if (document.getElementById('ss-modchat-styles')) return;
+        const css = document.createElement('style');
+        css.id = 'ss-modchat-styles';
+        css.textContent = `
+            #custom-reports-panel #ss-modchat-toggle {
+                position:relative; display:inline-flex; align-items:center; justify-content:center;
+                flex:0 0 auto; background:none !important; border:0 !important; padding:0 2px !important;
+                margin:0; color:#ffffff !important; cursor:pointer; box-shadow:none !important;
+                font-size:calc(19 * var(--ss-report-unit)) !important; line-height:1;
+                text-shadow:none !important; opacity:1; transition:opacity .2s;
+            }
+            #custom-reports-panel #ss-modchat-toggle .fas { color:inherit !important; }
+            #custom-reports-panel.ss-modchat-active #ss-modchat-toggle { opacity:.2 !important; }
+            #custom-reports-panel #ss-modchat-toggle.ss-modchat-unread .fas {
+                animation:ss-modchat-flash 1s steps(1,end) infinite;
+            }
+            @keyframes ss-modchat-flash { 0%, 100% {color:#ffffff;} 50% {color:#fff100;} }
+            #custom-reports-panel #ss-modchat-toggle .ss-modchat-badge {
+                position:absolute; top:-7px; right:-9px; display:none; align-items:center; justify-content:center;
+                min-width:calc(15 * var(--ss-report-unit)); height:calc(15 * var(--ss-report-unit));
+                padding:0 2px; border-radius:9px; background:#fff100; color:#0c576f !important;
+                font:700 calc(10 * var(--ss-report-unit))/1 Arial,sans-serif !important;
+                text-shadow:none !important; box-sizing:border-box;
+            }
+            #custom-reports-panel .ss-modchat-window {display:none; flex-direction:column; min-height:0; width:100%;background:#06baf7;}
+            #custom-reports-panel.ss-modchat-active .ss-modchat-window {display:flex !important;}
+            #custom-reports-panel.ss-modchat-active .news-container {display:none !important;}
+            #custom-reports-panel.ss-modchat-active #ss-reports-count,
+            #custom-reports-panel.ss-modchat-active #ss-action-count,
+            #custom-reports-panel.ss-modchat-active #ss-reports-discord-copy {display:none !important;}
+            #custom-reports-panel #ss-modchat-older {
+                width:100%; background:transparent; color:#0c576f; border:0; cursor:pointer;
+                font-size:calc(11 * var(--ss-report-unit)); font-weight:700; padding:4px;
+            }
+            #custom-reports-panel #ss-modchat-messages {
+                display:flex; flex-direction:column; gap:7px; min-height:0; max-height:220px;
+                overflow-y:auto; overflow-x:hidden; padding:9px 8px; box-sizing:border-box;
+                background:#06baf7; font:calc(12 * var(--ss-report-unit))/1.35 Arial,sans-serif;
+                color:#0c576f; overflow-wrap:anywhere; white-space:pre-wrap;
+            }
+            #custom-reports-panel .ss-modchat-message strong {font-weight:800;color:#0c576f;}
+            #custom-reports-panel .ss-modchat-message span {color:#123d54;}
+            #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:15px 0;}
+            #custom-reports-panel #ss-modchat-status {
+                display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
+            }
+            #custom-reports-panel .ss-modchat-compose {display:flex;gap:5px;align-items:flex-end;padding:7px;background:#06baf7;border-top:1px solid #0c576f55;}
+            #custom-reports-panel #ss-modchat-input {
+                flex:1;min-width:0;min-height:31px;max-height:70px;resize:vertical;padding:6px;
+                color:#0c576f;background:white;border:1px solid #0c576f;border-radius:4px;
+                font:calc(12 * var(--ss-report-unit))/1.25 Arial,sans-serif;
+            }
+            #custom-reports-panel #ss-modchat-send {
+                padding:8px 9px;border:0;border-radius:4px;cursor:pointer;background:#0c576f;
+                color:#fff;font:700 calc(12 * var(--ss-report-unit)) Arial,sans-serif;
+            }
+            #custom-reports-panel #ss-modchat-send:disabled {opacity:.5;cursor:default;}
+        `;
+        document.head.appendChild(css);
+    }
+    function ensureUI() {
+        const nextPanel = document.getElementById('custom-reports-panel');
+        if (!nextPanel) return;
+        if (panel !== nextPanel) panel = nextPanel;
+        ensureStyles();
+        const discordIcon = panel.querySelector('#ss-reports-discord-copy');
+        const heading = panel.querySelector('#ss-reports-view-toggle');
+        if (!discordIcon || !heading) return;
+        let toggle = panel.querySelector('#ss-modchat-toggle');
+        if (!toggle) {
+            toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.id = 'ss-modchat-toggle';
+            toggle.title = 'MOD Chat';
+            toggle.setAttribute('aria-label', 'Open MOD Chat');
+            toggle.setAttribute('aria-pressed', 'false');
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-comment';
+            icon.setAttribute('aria-hidden', 'true');
+            const badge = document.createElement('span');
+            badge.className = 'ss-modchat-badge';
+            badge.setAttribute('aria-hidden', 'true');
+            toggle.append(icon, badge);
+            toggle.addEventListener('click', () => setOpen(!open));
+            discordIcon.after(toggle);
+            heading.addEventListener('click', event => {
+                if (!open) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                setOpen(false);
+            }, true);
+            for (const id of ['ss-reports-count', 'ss-action-count']) {
+                panel.querySelector(`#${id}`)?.addEventListener('click', () => {
+                    if (open) setOpen(false);
+                }, true);
+            }
+        }
+        if (!panel.querySelector('.ss-modchat-window')) {
+            const windowEl = document.createElement('div');
+            windowEl.className = 'ss-modchat-window';
+            const older = document.createElement('button');
+            older.id = 'ss-modchat-older';
+            older.type = 'button';
+            older.textContent = 'Load older chat';
+            older.addEventListener('click', fetchOlder);
+            const messages = document.createElement('div');
+            messages.id = 'ss-modchat-messages';
+            messages.setAttribute('role', 'log');
+            messages.setAttribute('aria-label', 'MOD Chat messages');
+            const info = document.createElement('div');
+            info.id = 'ss-modchat-status';
+            info.setAttribute('role', 'status');
+            const compose = document.createElement('div');
+            compose.className = 'ss-modchat-compose';
+            const input = document.createElement('textarea');
+            input.id = 'ss-modchat-input';
+            input.rows = 1;
+            input.placeholder = 'Message MOD Chat...';
+            input.setAttribute('aria-label', 'MOD Chat message');
+            input.addEventListener('keydown', event => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    sendMessage();
+                }
+            });
+            const send = document.createElement('button');
+            send.id = 'ss-modchat-send';
+            send.type = 'button';
+            send.textContent = 'Send';
+            send.addEventListener('click', sendMessage);
+            compose.append(input, send);
+            windowEl.append(older, messages, info, compose);
+            panel.querySelector('.tab-content')?.appendChild(windowEl);
+        }
+        panel.classList.toggle('ss-modchat-active', open);
+        if (open) heading.textContent = 'MOD Chat';
+        updateBadge();
+        updateOlderButton();
+    }
+
+    ensureUI();
+    setInterval(ensureUI, 700);
+    setInterval(fetchLatest, POLL_MS);
+    setInterval(syncPendingEgg, 5000);
+    fetchLatest();
+    getAccount().catch(error => console.warn('[MOD Chat] Account:', error.message || error));
+    return { refresh: () => fetchLatest(true), ensureUI, close: () => setOpen(false) };
+};
