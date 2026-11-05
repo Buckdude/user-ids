@@ -16,8 +16,8 @@ ccmod | CONTENT CREATOR MOD | CC MOD | #FFFFFF | #9E6BFF
 cc | CONTENT CREATOR | CC | #FFFFFF | #E91E63
 excc | Ex CONTENT CREATOR | Ex CC | #FFFFFF | #AB1045
 member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5
-cheater | CHEATER | CHEATER | #FFFFFF | #CD0100 | | | #CD0100,#FFFFFF | 0.3
-bot | BOT | BOT | #FFFFFF | #CD0100 | | | #CD0100,#FFFFFF | 0.3
+cheater | CHEATER | CHEATER | #FFFFFF | #CD0100 | | | #CD0100,#FFF100 | 0.3
+bot | BOT | BOT | #FFFFFF | #900100
 toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24
-verified | {name} | {name} | #FFFFFF | #363c3e | 1
+verified | {name} | {name} | #FFFFFF | #313338 | 1
 name | {name} | {name} | #FFFFFF | #0C576F | 1
