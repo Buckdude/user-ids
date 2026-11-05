@@ -8,6 +8,7 @@
 # EXAMPLE LINK: mod | BWD MOD | MOD | #FFFFFF | #0029FF | link | https://example.com
 # EXAMPLE COPY+FLASH: dev | SCRIPT DEV | DEV | #C2FBBF | #000000 | copy | Hello | #000000,#FF0000 | 0.3
 # EXAMPLE NAME SWITCH: name | {name} | {name} | #FFFFFF | #0C576F | switch
+# KEY | POPUP | LOG | TEXT HEX | BG HEX | CLICK | VALUE | FLASH HEX COLORS | SECONDS
 
 dev | SCRIPT DEV | DEV | #C2FBBF | #000000
 wizard | WIZARD | WIZARD | #FFFFFF | #3498DB
