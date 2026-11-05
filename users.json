@@ -127,10 +127,10 @@
     "80757664": {
       "name": "arendi_08",
       "nickname": "Arendi",
-      "tags": [
-        "eggforcer",
-        "leaguerep",
-        "member"
+      "discord_id": "1035134169312931900",
+      "tags": ["eggforcer", "leaguerep", "member"],
+      "links": {
+      "leaguerep": "https://discord.gg/ebVgg9vsjp",
       ]
     },
     "1943513": {
