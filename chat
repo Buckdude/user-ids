@@ -9,6 +9,31 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     const POLL_MS = 5000;
     const MAX_HISTORY = 500;
     const MAX_TRACKED = 1200;
+    const ADMIN_CACHE_KEY = 'ss-live-reports-links-hub';
+    const TAGS_CACHE_KEY = 'ss-live-reports-custom-tag-definitions';
+    const ROLE_ALIASES = {
+        dev: ['dev', 'developer', 'script_dev'],
+        league: ['league', 'leaguerep', 'league_rep', 'league rep'],
+        cc: ['cc', 'creator', 'content creator'],
+        excc: ['excc', 'ex_cc', 'ex_content_creator', 'ex content creator'],
+        mod: ['mod', 'community_mod', 'communitymod', 'community mod'],
+        archwizard: ['archwizard', 'arch_wizard'],
+        leaguemod: ['leaguemod', 'league_mod']
+    };
+    const FALLBACK_TAG_LINES = [
+        'dev | SCRIPT DEV | DEV | #C2FBBF | #000000',
+        'wizard | WIZARD | WIZARD | #FFFFFF | #3498DB',
+        'archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694',
+        'mod | BWD MOD | MOD | #FFFFFF | #0029FF',
+        'eggforcer | EGGFORCER | EGGFORCER | #FFFFFF | #71368A',
+        'leaguemod | LEAGUE MOD | LEAGUE MOD | #FFFFFF | #05800C',
+        'league | LEAGUE REP | LEAGUE | #FFFFFF | #006105',
+        'ccmod | CONTENT CREATOR MOD | CC MOD | #FFFFFF | #9E6BFF',
+        'cc | CONTENT CREATOR | CC | #FFFFFF | #E91E63',
+        'excc | EX CONTENT CREATOR | Ex CC | #FFFFFF | #AB1045',
+        'member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5',
+        'name | {name} | {name} | #FFFFFF | #0C576F'
+    ].join('\n');
     const history = new Map();
     const known = new Set();
     const unread = new Set();
@@ -24,6 +49,15 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     let nextRetry = 0;
     let currentOldest = '';
     let noMoreOlder = false;
+    let directory = new Map();
+    let verifiedDirectory = {};
+    let tagDefinitions = parseTagDefinitions(FALLBACK_TAG_LINES);
+    let identitySignature = '';
+    let lastCachedIdentitySource = '';
+    let identityRevision = 0;
+    let identityLoading = false;
+    let identityFetchPromise = null;
+    let nextDirectoryFetch = 0;
 
     try {
         const saved = JSON.parse(GM_getValue(STATE_KEY, '{}'));
@@ -58,6 +92,175 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     }
     function getName(author) {
         return String(author?.username || author?.global_name || 'Unknown');
+    }
+    function parseTagDefinitions(raw) {
+        const tags = [];
+        for (const line of String(raw || '').split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const fields = trimmed.split('|').map(value => value.trim());
+            if (fields.length < 5 || !/^[a-z][a-z0-9_]*$/i.test(fields[0])) continue;
+            if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(fields[3]) ||
+                !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(fields[4])) continue;
+            tags.push({ key: fields[0].toLowerCase(), label: fields[2],
+                textColor: fields[3], backgroundColor: fields[4],
+                nameGroup: fields[1] === '{name}' && fields[2] === '{name}' });
+        }
+        return tags.length ? tags : parseTagDefinitions(FALLBACK_TAG_LINES);
+    }
+    function parseDirectoryJson(source) {
+        try { return JSON.parse(source); }
+        catch (_) {
+            let output = '';
+            let quoted = false;
+            let escaped = false;
+            for (let i = 0; i < source.length; i++) {
+                const char = source[i];
+                if (quoted) {
+                    output += char;
+                    if (escaped) escaped = false;
+                    else if (char === '\\') escaped = true;
+                    else if (char === '"') quoted = false;
+                } else if (char === '"') {
+                    quoted = true;
+                    output += char;
+                } else if (char === ',') {
+                    let next = i + 1;
+                    while (/\s/.test(source[next] || '')) next++;
+                    if (source[next] !== '}' && source[next] !== ']') output += char;
+                } else {
+                    output += char;
+                }
+            }
+            return JSON.parse(output);
+        }
+    }
+    function getHub() {
+        try {
+            const hub = JSON.parse(GM_getValue(ADMIN_CACHE_KEY, '{}'));
+            return hub && typeof hub === 'object' ? hub : {};
+        } catch (_) { return {}; }
+    }
+    function getRawLink(url) {
+        try {
+            const parsed = new URL(url);
+            return parsed.protocol === 'https:' && parsed.hostname === 'raw.githubusercontent.com' ? parsed.href : '';
+        } catch (_) { return ''; }
+    }
+    function applyIdentityData(players, verified, tags) {
+        const nextDirectory = new Map();
+        for (const [playerId, player] of Object.entries(players || {})) {
+            if (!/^\d+$/.test(playerId) || !player || typeof player !== 'object') continue;
+            const discordId = String(player.discord_id ?? player.discordId ?? '').trim();
+            if (!/^\d+$/.test(discordId)) continue;
+            const entry = { playerId, name: String(player.name || ''),
+                nickname: String(player.nickname || ''),
+                tags: Array.isArray(player.tags) ? player.tags.map(tag => String(tag).toLowerCase()) : [] };
+            nextDirectory.set(discordId, entry);
+        }
+        const nextSignature = JSON.stringify([Array.from(nextDirectory.entries()), verified, tags]);
+        if (nextSignature === identitySignature) return;
+        directory = nextDirectory;
+        verifiedDirectory = verified;
+        tagDefinitions = tags;
+        identitySignature = nextSignature;
+        identityRevision++;
+        if (open) {
+            const list = panel?.querySelector('#ss-modchat-messages');
+            if (list) delete list.dataset.signature;
+            render();
+        }
+    }
+    function refreshIdentityFromCache() {
+        const hub = getHub();
+        const usersURL = getRawLink(hub.GITHUB_USER_TAGS_URL);
+        if (!usersURL) return false;
+        const rawPlayers = String(GM_getValue('ss-live-reports-tag-data:' + encodeURIComponent(usersURL), '') || '');
+        if (!rawPlayers) return false;
+        let players;
+        try { players = parseDirectoryJson(rawPlayers).players; }
+        catch (_) { return false; }
+        if (!players || typeof players !== 'object') return false;
+        const verifiedURL = getRawLink(hub.GITHUB_VERIFIED_URL);
+        const rawVerified = verifiedURL
+            ? String(GM_getValue('ss-live-reports-verified-names:' + encodeURIComponent(verifiedURL), '') || '') : '';
+        const rawTags = String(GM_getValue(TAGS_CACHE_KEY, '') || FALLBACK_TAG_LINES);
+        const sourceSignature = JSON.stringify([usersURL, rawPlayers, rawVerified, rawTags]);
+        if (sourceSignature === lastCachedIdentitySource) return true;
+        let verified = {};
+        try { if (rawVerified) verified = parseDirectoryJson(rawVerified).players || {}; }
+        catch (_) {}
+        const tags = parseTagDefinitions(rawTags);
+        lastCachedIdentitySource = sourceSignature;
+        applyIdentityData(players, verified, tags);
+        return true;
+    }
+    async function refreshIdentityFromGitHub() {
+        if (identityLoading) return identityFetchPromise;
+        if (Date.now() < nextDirectoryFetch) return;
+        const hub = getHub();
+        const url = getRawLink(hub.GITHUB_USER_TAGS_URL);
+        if (!url || typeof fetch !== 'function') return;
+        identityLoading = true;
+        nextDirectoryFetch = Date.now() + 30000;
+        identityFetchPromise = (async () => {
+        try {
+            const response = await fetch(url + (url.includes('?') ? '&' : '?') + 'refresh=' + Date.now(), { cache: 'no-store' });
+            if (!response.ok) return;
+            const players = parseDirectoryJson(await response.text()).players;
+            if (!players || typeof players !== 'object') return;
+            let verified = verifiedDirectory;
+            const verifiedURL = getRawLink(hub.GITHUB_VERIFIED_URL);
+            if (verifiedURL) {
+                try {
+                    const result = await fetch(verifiedURL + '?refresh=' + Date.now(), { cache: 'no-store' });
+                    if (result.ok) verified = parseDirectoryJson(await result.text()).players || {};
+                } catch (_) {}
+            }
+            let tags = tagDefinitions;
+            const tagURL = getRawLink(hub.GITHUB_REPORT_TAGS_URL);
+            if (tagURL) {
+                try {
+                    const result = await fetch(tagURL + '?refresh=' + Date.now(), { cache: 'no-store' });
+                    if (result.ok) tags = parseTagDefinitions(await result.text());
+                } catch (_) {}
+            }
+            applyIdentityData(players, verified, tags);
+        } catch (_) {
+        } finally { identityLoading = false; identityFetchPromise = null; }
+        })();
+        return identityFetchPromise;
+    }
+    function refreshIdentity() {
+        refreshIdentityFromCache();
+        refreshIdentityFromGitHub();
+    }
+    function getIdentity(discordId) {
+        const player = directory.get(String(discordId || ''));
+        if (!player) return null;
+        const verified = verifiedDirectory?.[player.playerId] || {};
+        const name = String(verified.nickname || verified.name || player.nickname || player.name || '').trim();
+        if (!name) return null;
+        const roles = new Set(player.tags);
+        const role = tagDefinitions.find(tag => !tag.nameGroup &&
+            (roles.has(tag.key) || (ROLE_ALIASES[tag.key] || []).some(alias => roles.has(alias)))) || null;
+        const nameTag = tagDefinitions.find(tag => tag.nameGroup && tag.key !== 'name' && roles.has(tag.key)) ||
+            tagDefinitions.find(tag => tag.nameGroup && tag.key === 'name') ||
+            { textColor: '#FFFFFF', backgroundColor: '#0C576F' };
+        return { name, role, nameTag: {
+            textColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.text_color || verified.textColor || '')
+                ? (verified.text_color || verified.textColor) : nameTag.textColor,
+            backgroundColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.background_color || verified.backgroundColor || '')
+                ? (verified.background_color || verified.backgroundColor) : nameTag.backgroundColor
+        } };
+    }
+    function makeBadge(tag, label) {
+        const badge = document.createElement('span');
+        badge.className = 'ss-report-tag ss-modchat-tag';
+        badge.textContent = label;
+        badge.style.setProperty('color', tag.textColor, 'important');
+        badge.style.setProperty('background', tag.backgroundColor, 'important');
+        return badge;
     }
     function getBody(message) {
         const content = String(message.content || '').trim();
@@ -168,7 +371,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         if (!btn) return;
         btn.style.display = noMoreOlder || !currentOldest ? 'none' : 'block';
         btn.disabled = loadingOlder;
-        btn.textContent = loadingOlder ? 'Loading...' : '';
+        btn.textContent = loadingOlder ? 'Loading...' : 'Load older chat';
     }
     function updateBadge() {
         const icon = panel?.querySelector('#ss-modchat-toggle');
@@ -184,24 +387,36 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         if (!list || !open) return;
         const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 35;
         const sorted = [...history.values()].sort((a, b) => ordered(a.id, b.id));
-        if (list.dataset.signature === sorted.map(m => m.id + ':' + m.content + ':' + (m.reactions || []).length).join('|')) return;
-        list.dataset.signature = sorted.map(m => m.id + ':' + m.content + ':' + (m.reactions || []).length).join('|');
+        const signature = identityRevision + ':' + sorted.map(m => m.id + ':' + m.content + ':' + (m.reactions || []).length).join('|');
+        if (list.dataset.signature === signature) return;
+        list.dataset.signature = signature;
         list.replaceChildren();
         if (!sorted.length) {
             const empty = document.createElement('div');
             empty.className = 'ss-modchat-empty';
-            empty.textContent = 'No 🥚 chat messages found.';
+            empty.textContent = 'No messages yet.';
             list.appendChild(empty);
         }
         for (const message of sorted) {
             const row = document.createElement('div');
             row.className = 'ss-modchat-message';
             row.dataset.messageId = message.id;
-            const user = document.createElement('strong');
-            user.textContent = `${getName(message.author)}: `;
+            const identity = getIdentity(message.author?.id);
+            if (identity) {
+                const badges = document.createElement('span');
+                badges.className = 'ss-report-log-tags ss-modchat-author-tags';
+                if (identity.role) badges.appendChild(makeBadge(identity.role, identity.role.label));
+                badges.appendChild(makeBadge(identity.nameTag, identity.name));
+                row.appendChild(badges);
+            } else {
+                const fallback = document.createElement('strong');
+                fallback.textContent = getName(message.author) + ': ';
+                row.appendChild(fallback);
+            }
             const body = document.createElement('span');
+            body.className = 'ss-modchat-body';
             body.textContent = getDisplayedBody(message);
-            row.append(user, body);
+            row.appendChild(body);
             row.title = message.timestamp ? new Date(message.timestamp).toLocaleString() : '';
             list.appendChild(row);
         }
@@ -223,14 +438,15 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     }
     async function sendMessage() {
         const field = panel?.querySelector('#ss-modchat-input');
-        const send = panel?.querySelector('#ss-modchat-send');
         const input = field?.value?.trim() || '';
-        if (sending || !input || !field || !send) return;
+        if (sending || !input || !field) return;
         sending = true;
-        send.disabled = true;
+        field.disabled = true;
         try {
             const user = await getAccount();
-            const content = `${user.username}: ${input}`;
+            refreshIdentityFromCache();
+            if (!getIdentity(user.id)) await refreshIdentityFromGitHub();
+            const content = getIdentity(user.id) ? input : `${getName(user)}: ${input}`;
             if (content.length > 2000) throw new Error('Message is too long (Discord 2,000-character limit).');
             const result = await api('POST', API, JSON.stringify({
                 content, allowed_mentions: { parse: [] }
@@ -253,7 +469,8 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             status(error.message || String(error));
         } finally {
             sending = false;
-            send.disabled = false;
+            field.disabled = false;
+            if (open && field.isConnected) field.focus();
         }
     }
     let syncingEgg = false;
@@ -344,23 +561,30 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 background:#06baf7; font:calc(12 * var(--ss-report-unit))/1.35 Arial,sans-serif;
                 color:#0c576f; overflow-wrap:anywhere; white-space:pre-wrap;
             }
+            #custom-reports-panel .ss-modchat-message {display:flex; flex-wrap:wrap; gap:4px; align-items:center;}
             #custom-reports-panel .ss-modchat-message strong {font-weight:800;color:#0c576f;}
-            #custom-reports-panel .ss-modchat-message span {color:#123d54;}
+            #custom-reports-panel .ss-modchat-message .ss-modchat-body {color:#123d54; white-space:pre-wrap;}
+            #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:3px;}
+            #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important;}
             #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:15px 0;}
             #custom-reports-panel #ss-modchat-status {
                 display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
             }
-            #custom-reports-panel .ss-modchat-compose {display:flex;gap:5px;align-items:flex-end;padding:7px;background:#06baf7;border-top:1px solid #0c576f55;}
-            #custom-reports-panel #ss-modchat-input {
-                flex:1;min-width:0;min-height:31px;max-height:70px;resize:vertical;padding:6px;
-                color:#0c576f;background:white;border:1px solid #0c576f;border-radius:4px;
-                font:calc(12 * var(--ss-report-unit))/1.25 Arial,sans-serif;
+            #custom-reports-panel .ss-modchat-compose {display:block; padding:6px 7px; background:#5d9db2; border-top:1px solid #0c576f55;}
+            #custom-reports-panel #ss-modchat-input.chat.roundme_sm {
+                display:block !important; width:100% !important; min-width:0; box-sizing:border-box;
+                min-height:35px; margin:0; padding:5px 7px; outline:none;
+                pointer-events:auto !important; border:0 !important; border-radius:8px;
+                background:transparent !important; color:#ffffff !important;
+                font-family:Nunito,Arial,sans-serif !important; font-size:calc(19 * var(--ss-report-unit)) !important;
+                font-weight:700 !important; line-height:1.2 !important;
             }
-            #custom-reports-panel #ss-modchat-send {
-                padding:8px 9px;border:0;border-radius:4px;cursor:pointer;background:#0c576f;
-                color:#fff;font:700 calc(12 * var(--ss-report-unit)) Arial,sans-serif;
+            #custom-reports-panel #ss-modchat-input.chat.roundme_sm::placeholder {color:#fff100 !important; opacity:1;}
+            #custom-reports-panel #ss-modchat-input.chat.roundme_sm:focus {
+                background:#0c576f !important; color:#ffffff !important;
             }
-            #custom-reports-panel #ss-modchat-send:disabled {opacity:.5;cursor:default;}
+            #custom-reports-panel #ss-modchat-input.chat.roundme_sm:focus::placeholder {color:#75c3de !important;}
+            #custom-reports-panel #ss-modchat-input:disabled {opacity:.6;}
         `;
         document.head.appendChild(css);
     }
@@ -407,34 +631,31 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             const older = document.createElement('button');
             older.id = 'ss-modchat-older';
             older.type = 'button';
-            older.textContent = '';
+            older.textContent = 'Load older chat';
             older.addEventListener('click', fetchOlder);
             const messages = document.createElement('div');
             messages.id = 'ss-modchat-messages';
             messages.setAttribute('role', 'log');
-            messages.setAttribute('aria-label', 'Messages');
+            messages.setAttribute('aria-label', 'MOD Chat messages');
             const info = document.createElement('div');
             info.id = 'ss-modchat-status';
             info.setAttribute('role', 'status');
             const compose = document.createElement('div');
             compose.className = 'ss-modchat-compose';
-            const input = document.createElement('textarea');
+            const input = document.createElement('input');
+            input.type = 'text';
             input.id = 'ss-modchat-input';
-            input.rows = 1;
-            input.placeholder = 'Messages...';
-            input.setAttribute('aria-label', 'MOD Messages');
-            input.addEventListener('keydown', event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    sendMessage();
-                }
-            });
-            const send = document.createElement('button');
-            send.id = 'ss-modchat-send';
-            send.type = 'button';
-            send.textContent = 'Send';
-            send.addEventListener('click', sendMessage);
-            compose.append(input, send);
+            input.className = 'chat roundme_sm';
+            input.maxLength = 64;
+            input.tabIndex = -1;
+            input.placeholder = 'Press ENTER to chat';
+            input.setAttribute('aria-label', 'MOD Chat message');
+            input.style.display = 'block';
+            input.style.pointerEvents = 'auto';
+            input.style.background = 'transparent';
+            input.addEventListener('focus', () => { input.placeholder = 'Press TAB to exit'; });
+            input.addEventListener('blur', () => { input.placeholder = 'Press ENTER to chat'; });
+            compose.appendChild(input);
             windowEl.append(older, messages, info, compose);
             panel.querySelector('.tab-content')?.appendChild(windowEl);
         }
@@ -444,10 +665,32 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         updateOlderButton();
     }
 
+    document.addEventListener('keydown', event => {
+        if (!open) return;
+        const field = panel?.querySelector('#ss-modchat-input');
+        if (!field || field.disabled) return;
+        if (event.target === field) {
+            event.stopImmediatePropagation();
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendMessage();
+            } else if (event.key === 'Tab' || event.key === 'Escape') {
+                event.preventDefault();
+                field.blur();
+            }
+        } else if (event.key === 'Enter' &&
+            !event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            field.focus();
+        }
+    }, true);
     ensureUI();
+    refreshIdentity();
     setInterval(ensureUI, 700);
     setInterval(fetchLatest, POLL_MS);
     setInterval(syncPendingEgg, 5000);
+    setInterval(refreshIdentity, 3000);
     fetchLatest();
     getAccount().catch(error => console.warn('[MOD Chat] Account:', error.message || error));
     return { refresh: () => fetchLatest(true), ensureUI, close: () => setOpen(false) };
