@@ -931,6 +931,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
             if (value.GITHUB_VERIFIED_URL && !isGithubRawUrl(value.GITHUB_VERIFIED_URL))
                 throw new Error('Invalid link: GITHUB_VERIFIED_URL');
+            if (value.GITHUB_CHAT_URL && !isGithubRawUrl(value.GITHUB_CHAT_URL))
+                throw new Error('Invalid link: GITHUB_CHAT_URL');
             return value;
         }
         function isGithubRawUrl(url) {
@@ -998,6 +1000,46 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         loadReportTagDefinitions();
         setInterval(loadReportTagDefinitions, REPORT_TAGS_REFRESH_MS);
 
+        let modChatController = null;
+        let modChatUrl = '';
+        let modChatSource = '';
+        let modChatLoading = false;
+
+        async function loadModChatSystem() {
+            const url = githubLinkHub?.GITHUB_CHAT_URL;
+            if (!url || modChatLoading) return;
+            modChatLoading = true;
+            try {
+                const source = await readGithubHubText(url);
+                if (githubLinkHub?.GITHUB_CHAT_URL !== url) return;
+                if (source === modChatSource && modChatController) return;
+                if (modChatController) {
+                    window.location.reload();
+                    return;
+                }
+                const moduleFactory = new Function('window', 'document', 'globalThis',
+                    `${source}\nreturn globalThis.__SS_MOD_CHAT_START__;`);
+                const start = moduleFactory(window, document, globalThis);
+                if (typeof start !== 'function') throw new Error('Invalid chat system entry.');
+                delete globalThis.__SS_MOD_CHAT_START__;
+                modChatController = start({
+                    channelId: CHANNEL_ID,
+                    requestAPI,
+                    GM_getValue,
+                    GM_setValue,
+                    getReportsView: () => reportsView,
+                    refreshReportsHeader: () => updateLogCounters(reportsArray)
+                });
+                modChatSource = source;
+                modChatUrl = url;
+            } catch (error) {
+                console.warn('[Reports] MOD Chat unavailable:', error.message || error);
+            } finally {
+                modChatLoading = false;
+            }
+        }
+        setInterval(loadModChatSystem, 30000);
+
         function useGithubLinkHub(links, force = false) {
             const tagUrlChanged = githubLinkHub?.GITHUB_USER_TAGS_URL !== links.GITHUB_USER_TAGS_URL;
             const verifiedUrlChanged = githubLinkHub?.GITHUB_VERIFIED_URL !== links.GITHUB_VERIFIED_URL;
@@ -1005,6 +1047,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 .filter(key => key !== 'GITHUB_USER_TAGS_URL')
                 .some(key => githubLinkHub?.[key] !== links[key]);
             githubLinkHub = links;
+            if (links.GITHUB_CHAT_URL && (force || !modChatController || modChatUrl !== links.GITHUB_CHAT_URL))
+                loadModChatSystem();
             if (tagUrlChanged) {
                 githubTagsLoading = false;
                 githubPlayerTags = new Map();
@@ -1349,8 +1393,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             });
         }
 
-        function requestAPI(method, url) {
-            return discordRequest(method, url);
+        function requestAPI(method, url, data) {
+            return discordRequest(method, url, data);
         }
 
 
@@ -2582,6 +2626,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     fetchDiscordReports();
                     loadGithubLinkHub(true);
                     loadReportTagDefinitions();
+                    modChatController?.refresh();
                 });
 
                 const syncReportsVisibility = () => {
