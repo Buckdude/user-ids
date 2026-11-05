@@ -1,15 +1,18 @@
-# TAGS | TOP = FIRST
-# KEY | POPUP | LOG | TEXT HEX | BG HEX
-# ORDER: Move lines.
-# ASSIGN: Use key in user.tags
-# AUTO: member, cheater, bot, toxic.
-# FORMAT: lowercase_key, #HEX colors.
-# REFRESH: 15 seconds.
+# KEY | POPUP | LOG | TEXT HEX | BG HEX | CLICK | VALUE | FLASH HEX COLORS | SECONDS
+# TOP = FIRST. Leave CLICK/VALUE/FLASH blank to disable. Old 5-column tags still work.
+# CLICK: link (URL), copy (text), copyid (player.discord_id), switch (other label).
+# NAME switch: blank VALUE toggles nickname / username. Other switch: VALUE = alternate.
+# FLASH: #112233,#445566,#778899 | 0.3 seconds per color. Blank = no flash.
+# NAME GROUP: staffname | {name} | {name} | #FFFFFF | #AA3377 | switch
+# ADD name groups to users.json tags. 20% opacity for 0.2 seconds on click.
+# EXAMPLE LINK: mod | BWD MOD | MOD | #FFFFFF | #0029FF | link | https://example.com
+# EXAMPLE COPY+FLASH: dev | SCRIPT DEV | DEV | #C2FBBF | #000000 | copy | Hello | #000000,#FF0000 | 0.3
+# EXAMPLE NAME SWITCH: name | {name} | {name} | #FFFFFF | #0C576F | switch
 
 dev | SCRIPT DEV | DEV | #C2FBBF | #000000
 wizard | WIZARD | WIZARD | #FFFFFF | #3498DB
 archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694
-mod | BWD MOD | MOD | #FFFFFF | #0029FF
+mod | mod | BWD MOD | MOD | #FFFFFF | #0029FF | link | https://example.com
 eggforcer | EGGFORCER | EGGFORCER | #FFFFFF | #71368A
 exeggforcer | Ex EGGFORCER | Ex EGGFORCER | #FFFFFF | #532766
 leaguemod | LEAGUE MOD | LEAGUE MOD | #FFFFFF | #05800C
@@ -21,3 +24,4 @@ member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5
 cheater | CHEATER | CHEATER | #FFFFFF | #900100
 bot | BOT | BOT | #FFFFFF | #900100
 toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24
+name | {name} | {name} | #FFFFFF | #0C576F | copyid
