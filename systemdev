@@ -1177,6 +1177,124 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
         }
 
+        const X_REACTION = '❌';
+        const X_STATE_KEY = `ss-live-reports-${CHANNEL_ID}-x-auto-v1`;
+        let xAutoState = {};
+        try {
+            const saved = GM_getValue(X_STATE_KEY, '{}');
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) xAutoState = parsed;
+        } catch (_) {}
+        const xReactionKey = id => `${id}-${encodeURIComponent(X_REACTION)}`;
+        const xSave = () => GM_setValue(X_STATE_KEY, JSON.stringify(xAutoState));
+        let xSyncRunning = false;
+        let xSyncAgain = false;
+        let xNextRetry = 0;
+
+        function xRegisterReports(reports) {
+            let changed = false;
+            for (const report of reports) {
+                const entry = xAutoState[report.pid];
+                if (!entry?.enabled) continue;
+                if (!entry.messages || typeof entry.messages !== 'object') entry.messages = {};
+                if (!(report.id in entry.messages)) {
+                    entry.messages[report.id] = true;
+                    changed = true;
+                }
+                reactionCache[xReactionKey(report.id)] = true;
+            }
+            if (changed) xSave();
+            xSync();
+        }
+
+        function xToggle(report) {
+            const pid = report.pid;
+            const entry = xAutoState[pid] || { enabled: false, messages: {} };
+            if (!entry.messages || typeof entry.messages !== 'object') entry.messages = {};
+            const enabled = !entry.enabled;
+            entry.enabled = enabled;
+            if (enabled) {
+                for (const current of reportsArray) {
+                    if (current.pid === pid) entry.messages[current.id] = true;
+                }
+                entry.messages[report.id] = true;
+            } else {
+                entry.messages[report.id] = true;
+            }
+            xAutoState[pid] = entry;
+            for (const id of Object.keys(entry.messages)) reactionCache[xReactionKey(id)] = enabled;
+            xSave();
+            renderReportsList(reportsArray);
+            if (window.currentSelectedReport?.id === report.id) updateQuickReactionButtons(report.id);
+            xSync(true);
+        }
+
+        async function xSync(force = false) {
+            if (force) xNextRetry = 0;
+            if (xSyncRunning) { xSyncAgain = true; return; }
+            if (Date.now() < xNextRetry) return;
+            xSyncRunning = true;
+            let processed = 0;
+            try {
+                for (const [pid, entry] of Object.entries(xAutoState)) {
+                    if (!entry?.messages || typeof entry.messages !== 'object') continue;
+                    for (const id of Object.keys(entry.messages)) {
+                        const desired = !!entry.enabled;
+                        const key = xReactionKey(id);
+                        if (!(key in reactionConfirmed)) {
+                            const current = reportsArray.find(report => report.id === id);
+                            if (current) reactionConfirmed[key] = !!current.reactions?.some(r => r.emoji === X_REACTION && r.me);
+                        }
+                        if (key in reactionConfirmed && desired === !!reactionConfirmed[key]) {
+                            if (!desired) { delete entry.messages[id]; xSave(); }
+                            continue;
+                        }
+                        if (reactionPending.has(key)) continue;
+                        reactionPending.add(key);
+                        try {
+                            const url = `https://discord.com/api/v9/channels/${CHANNEL_ID}/messages/${id}/reactions/${encodeURIComponent(X_REACTION)}/@me`;
+                            const result = await requestAPI(desired ? 'PUT' : 'DELETE', url);
+                            if (result.status === 204 || result.status === 200 || (!desired && result.status === 404)) {
+                                reactionConfirmed[key] = desired;
+                                reactionCache[key] = desired;
+                                if (!desired && !entry.enabled) delete entry.messages[id];
+                                xSave();
+                                processed++;
+                            } else {
+                                xNextRetry = Date.now() + (result.status === 429 ? 15000 : 10000);
+                                console.warn('[Reports] X reaction sync HTTP', result.status);
+                                return;
+                            }
+                        } catch (error) {
+                            xNextRetry = Date.now() + 10000;
+                            console.warn('[Reports] X reaction sync failed:', error);
+                            return;
+                        } finally {
+                            reactionPending.delete(key);
+                        }
+                        if (entry.enabled !== desired) { xSyncAgain = true; break; }
+                        if (processed >= 8) { xSyncAgain = true; return; }
+                        await new Promise(resolve => setTimeout(resolve, 450));
+                    }
+                    if (!entry.enabled && Object.keys(entry.messages).length === 0) {
+                        delete xAutoState[pid];
+                        xSave();
+                    }
+                }
+            } finally {
+                xSyncRunning = false;
+                if (xSyncAgain) {
+                    xSyncAgain = false;
+                    setTimeout(() => xSync(), 500);
+                }
+                if (processed) {
+                    renderReportsList(reportsArray);
+                    if (window.currentSelectedReport) updateQuickReactionButtons(window.currentSelectedReport.id);
+                }
+            }
+        }
+        setInterval(() => xSync(), 5000);
+
         function getVisibleReports(reports, view) {
             if (view === 'action') return reports.filter(isActionTaken);
 
@@ -1187,7 +1305,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 resolvedByPlayer.get(report.pid).push(report);
             }
             return reports.filter(report => {
-                if (isActionTaken(report)) return false;
+                if (isActionTaken(report) || xAutoState[report.pid]?.enabled) return false;
                 const resolvingReports = resolvedByPlayer.get(report.pid) || [];
                 return !resolvingReports.some(actedReport => isEarlierOrSameReport(report, actedReport));
             });
@@ -1295,6 +1413,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     if (parsedReports.length >= 15) break;
                 }
 
+                xRegisterReports(parsedReports);
+
                 const activeIds = new Set(parsedReports.map(report => report.id));
                 let countStateChanged = false;
                 for (const messageId of recentReportCounts.keys()) {
@@ -1356,6 +1476,11 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         async function sendReactionAPI(messageId, emojiStr) {
+            if (emojiStr === X_REACTION) {
+                const report = reportsArray.find(item => item.id === messageId) ||
+                    (window.currentSelectedReport?.id === messageId ? window.currentSelectedReport : null);
+                if (report) { xToggle(report); return; }
+            }
             const encodedEmoji = encodeURIComponent(emojiStr);
             const cacheKey = `${messageId}-${encodedEmoji}`;
             const url = `https://discord.com/api/v9/channels/${CHANNEL_ID}/messages/${messageId}/reactions/${encodedEmoji}/@me`;
