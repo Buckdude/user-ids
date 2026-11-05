@@ -247,6 +247,16 @@
         "member"
       ]
     },
+    "1870222": {
+      "name": "sharkbucks",
+      "nickname": "Sharkbucks",
+      "discord_id": "328065506009415681",
+      "tags": ["dev", "eggforcer", "cc", "member"],
+      "links": {
+      "cc": "https://www.youtube.com/@Sharkbucks",
+      "name": "https://shellshock.io/gift/?c=Q03YVRSSJB&n=test"
+      }
+    }
     "4534": {
       "name": "_wabbits",
       "nickname": "Wabbits",
