@@ -198,8 +198,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const tags = Array.isArray(entry.tags)
                     ? entry.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim().toLowerCase()).filter(Boolean)
                     : [];
+                const links = Object.create(null);
+                if (entry.links && typeof entry.links === 'object' && !Array.isArray(entry.links)) {
+                    for (const [rawKey, rawUrl] of Object.entries(entry.links)) {
+                        const key = rawKey.trim().toLowerCase();
+                        if (!/^[a-z][a-z0-9_]*$/.test(key) || typeof rawUrl !== 'string') continue;
+                        try {
+                            const url = new URL(rawUrl.trim());
+                            if (url.protocol === 'https:' || url.protocol === 'http:') links[key] = url.href;
+                        } catch (_) {}
+                    }
+                }
                 if (!name && !nickname && tags.length === 0) continue;
-                next.set(pid, { name, nickname, tags, discordId });
+                next.set(pid, { name, nickname, tags, discordId, links });
             }
             githubNameTagsEnabled = Array.from(next.values()).some(entry => !!(entry.name || entry.nickname));
             githubPlayerTags = next;
@@ -226,6 +237,12 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
         function getGithubDiscordId(playerId) {
             return getGithubPlayer(playerId)?.discordId || '';
+        }
+
+        function getGithubPlayerBadgeLink(playerId, tag) {
+            const links = getGithubPlayer(playerId)?.links;
+            if (!links || !tag) return '';
+            return links[tag.key] || (tag.isNameGroup ? links.name || '' : '');
         }
 
         function hasGithubRole(playerId, role) {
@@ -365,12 +382,22 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
         }
 
+        function canSwitchReportBadge(tag, playerId) {
+            if (!tag) return false;
+            if (tag.clickAction === 'switch' && tag.clickValue.trim()) return true;
+            if (!tag.isNameGroup) return false;
+            const player = getGithubPlayer(playerId);
+            const primary = getGithubNameTag(playerId);
+            return !!(player?.name && primary && player.name !== primary);
+        }
+
         function getReportBadgeText(tag, playerId, isPopup) {
             const player = getGithubPlayer(playerId);
             const primary = tag.isNameGroup ? getGithubNameTag(playerId) : (isPopup ? tag.popupName : tag.logName);
-            if (tag.clickAction !== 'switch') return primary;
-            let alternates = tag.clickValue ? tag.clickValue.split('~').map(text => text.trim()).filter(Boolean) : [];
-            if (!alternates.length && tag.isNameGroup && player?.name) alternates = [player.name];
+            if (tag.clickAction !== 'switch' && !tag.isNameGroup) return primary;
+            let alternates = tag.clickAction === 'switch' && tag.clickValue
+                ? tag.clickValue.split('~').map(text => text.trim()).filter(Boolean) : [];
+            if (!alternates.length && tag.isNameGroup && player?.name && player.name !== primary) alternates = [player.name];
             const index = reportBadgeSwitches.get(`${playerId}:${tag.key}`) || 0;
             const values = [primary, ...alternates];
             return replaceReportBadgeTokens(values[index % values.length] || primary, playerId);
@@ -389,21 +416,24 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         function getReportBadgeAction(tag, playerId) {
-            if (!tag || !tag.clickAction || tag.clickAction === 'none') return '';
-            if (tag.clickAction === 'copyid' && !getGithubDiscordId(playerId)) return '';
-            if (['copy', 'link'].includes(tag.clickAction) && !tag.clickValue) return '';
-            if (tag.clickAction === 'switch' && !tag.isNameGroup && !tag.clickValue) return '';
-            if (tag.clickAction === 'switch' && tag.isNameGroup) {
-                const player = getGithubPlayer(playerId);
-                if (!tag.clickValue && (!player?.name || player.name === getGithubNameTag(playerId))) return '';
-            }
+            if (!tag) return '';
+            if (getGithubPlayerBadgeLink(playerId, tag)) return 'link';
+            if (!tag.clickAction || tag.clickAction === 'none') return canSwitchReportBadge(tag, playerId) ? 'switch' : '';
+            if (tag.clickAction === 'copyid' && !getGithubDiscordId(playerId))
+                return canSwitchReportBadge(tag, playerId) ? 'switch' : '';
+            if (['copy', 'link'].includes(tag.clickAction) && !tag.clickValue)
+                return canSwitchReportBadge(tag, playerId) ? 'switch' : '';
+            if (tag.clickAction === 'switch' && !canSwitchReportBadge(tag, playerId)) return '';
             return tag.clickAction;
         }
 
         function getReportBadgeActionTitle(tag, playerId) {
             const action = getReportBadgeAction(tag, playerId);
-            return action === 'link' ? 'Open link' : action === 'copy' ? 'Click to copy' :
-                action === 'copyid' ? 'Click to copy Discord ID' : action === 'switch' ? 'Click to switch label' : '';
+            const changesName = tag?.isNameGroup && canSwitchReportBadge(tag, playerId);
+            if (action === 'link') return changesName ? 'Open link and switch name' : 'Open link';
+            if (action === 'copy') return changesName ? 'Copy text and switch name' : 'Click to copy';
+            if (action === 'copyid') return changesName ? 'Copy Discord ID and switch name' : 'Click to copy Discord ID';
+            return action === 'switch' ? (tag.isNameGroup ? 'Click to switch name' : 'Click to switch label') : '';
         }
 
         function getReportBadgeAttributes(tag, playerId) {
@@ -454,6 +484,19 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
         }
 
+        function advanceReportBadgeSwitch(tag, playerId) {
+            const key = `${playerId}:${tag.key}`;
+            const custom = tag.clickAction === 'switch' && tag.clickValue
+                ? tag.clickValue.split('~').map(text => text.trim()).filter(Boolean) : [];
+            const count = custom.length ? custom.length + 1 : 2;
+            reportBadgeSwitches.set(key, ((reportBadgeSwitches.get(key) || 0) + 1) % count);
+            document.querySelectorAll('.ss-report-config-badge').forEach(other => {
+                if (other.dataset.ssPlayerId !== playerId || other.dataset.ssTagKey !== tag.key) return;
+                other.textContent = getReportBadgeText(tag, playerId, !!other.closest('#reportInfoPopup'));
+            });
+            if (typeof keepReportPopupSize === 'function') keepReportPopupSize();
+        }
+
         function activateReportBadge(badge, event) {
             const playerId = badge.dataset.ssPlayerId || '';
             const tag = getReportBadgeDefinition(badge.dataset.ssTagKey);
@@ -463,19 +506,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             event.stopPropagation();
             pulseReportBadge(badge);
             if (action === 'link') {
-                window.open(tag.clickValue, '_blank', 'noopener,noreferrer');
+                window.open(getGithubPlayerBadgeLink(playerId, tag) || tag.clickValue, '_blank', 'noopener,noreferrer');
             } else if (action === 'copy' || action === 'copyid') {
                 const value = action === 'copyid' ? getGithubDiscordId(playerId) : replaceReportBadgeTokens(tag.clickValue, playerId);
                 if (value) copyReportBadgeText(value);
-            } else if (action === 'switch') {
-                const key = `${playerId}:${tag.key}`;
-                const count = tag.clickValue ? tag.clickValue.split('~').filter(item => item.trim()).length + 1 : 2;
-                reportBadgeSwitches.set(key, ((reportBadgeSwitches.get(key) || 0) + 1) % count);
-                document.querySelectorAll('.ss-report-config-badge').forEach(other => {
-                    if (other.dataset.ssPlayerId !== playerId || other.dataset.ssTagKey !== tag.key) return;
-                    other.textContent = getReportBadgeText(tag, playerId, !!other.closest('#reportInfoPopup'));
-                });
-                if (typeof keepReportPopupSize === 'function') keepReportPopupSize();
+            }
+            if (action === 'switch' || (tag.isNameGroup && canSwitchReportBadge(tag, playerId))) {
+                advanceReportBadgeSwitch(tag, playerId);
             }
             return true;
         }
