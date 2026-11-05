@@ -1306,117 +1306,35 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             });
         }
 
-        let reportPopupSizeState = null;
         let reportPopupReasonCount = 1;
         let reportPopupReasonRequiredWidth = 0;
-        const lockedReportPopupContents = new WeakSet();
-
-        function lockReportPopupContents(popup) {
-            if (lockedReportPopupContents.has(popup)) return;
-            const sizingProperties = [
-                'font-size', 'line-height', 'letter-spacing', 'word-spacing',
-                'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-                'margin-top', 'margin-bottom', 'row-gap', 'column-gap',
-                'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
-                'border-top-left-radius', 'border-top-right-radius',
-                'border-bottom-right-radius', 'border-bottom-left-radius'
-            ];
-            const pixelValue = /^-?\d+(?:\.\d+)?px$/;
-            for (const element of popup.querySelectorAll('*')) {
-                const computed = getComputedStyle(element);
-                for (const property of sizingProperties) {
-                    const value = computed.getPropertyValue(property).trim();
-                    if (pixelValue.test(value)) element.style.setProperty(property, value);
-                }
-                if (element.matches('button')) {
-                    const width = computed.getPropertyValue('width').trim();
-                    if (pixelValue.test(width) && Number.parseFloat(width) > 0) {
-                        element.style.setProperty('width', width);
-                    }
-                    for (const property of ['min-width', 'max-width', 'min-height', 'max-height']) {
-                        const value = computed.getPropertyValue(property).trim();
-                        if (pixelValue.test(value)) element.style.setProperty(property, value);
-                    }
-                }
-            }
-            lockedReportPopupContents.add(popup);
-        }
-
-        // Fixed popup size: 110% of the original UI, independent of later browser zoom changes.
-        const REPORT_POPUP_UI_ZOOM = 1.10;
-
-        function getReportPopupZoom() {
-            const browserZoom = window.devicePixelRatio || 1;
-            const viewportZoom = window.visualViewport?.scale || 1;
-            const zoom = browserZoom * viewportZoom;
-            return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-        }
 
         function keepReportPopupSize() {
             const popup = document.getElementById('reportInfoPopup');
             if (!popup || popup.style.display === 'none') return;
-            lockReportPopupContents(popup);
 
-            if (!reportPopupSizeState || reportPopupSizeState.popup !== popup) {
-                const computed = getComputedStyle(popup);
-                const bounds = popup.getBoundingClientRect();
-                const width = Number.parseFloat(computed.width);
-                if (!bounds.width || !Number.isFinite(width) || width <= 0) return;
-                const matrix = computed.transform.match(/^matrix\(([^)]+)\)$/);
-                const values = matrix ? matrix[1].split(',').map(Number) : [];
-                const originalScale = values.length === 6 ? Math.hypot(values[0], values[1]) : 1;
-                reportPopupSizeState = {
-                    popup,
-                    zoom: getReportPopupZoom(),
-                    width,
-                    x: (bounds.left + bounds.width / 2) / window.innerWidth * 100,
-                    y: (bounds.top + bounds.height / 2) / window.innerHeight * 100,
-                    scale: originalScale,
-                    position: popup.style.position,
-                    left: popup.style.left,
-                    top: popup.style.top,
-                    transform: popup.style.transform,
-                    transformOrigin: popup.style.transformOrigin,
-                    maxHeight: popup.style.maxHeight
-                };
-                popup.style.width = `${width}px`;
-                popup.style.maxWidth = `${width}px`;
-                popup.style.fontSize = computed.fontSize;
-            }
+            popup.style.removeProperty('width');
+            popup.style.removeProperty('max-width');
+            const nativeWidth = Number.parseFloat(getComputedStyle(popup).width);
+            if (!Number.isFinite(nativeWidth) || nativeWidth <= 0) return;
 
-            const original = reportPopupSizeState;
-            const scale = (original.zoom / getReportPopupZoom()) * REPORT_POPUP_UI_ZOOM;
             const body = popup.querySelector('.ss-report-popup-body');
             if (body) {
                 body.style.width = reportPopupReasonCount >= 4 ? '100%' : '';
                 body.style.boxSizing = reportPopupReasonCount >= 4 ? 'border-box' : '';
             }
-            const visualScale = Math.max(0.01, original.scale * scale);
-            const maximumWidth = Math.max(1, (window.innerWidth - 24) / visualScale);
-            const normalWidth = original.width * (reportPopupReasonCount >= 4 ? 1 : 0.92);
+
+            const maximumWidth = Math.max(1, window.innerWidth - 24);
+            const normalWidth = nativeWidth * (reportPopupReasonCount >= 4 ? 1 : 0.92);
             let wantedWidth = Math.min(maximumWidth, Math.max(normalWidth, reportPopupReasonRequiredWidth));
             popup.style.width = `${wantedWidth}px`;
             popup.style.maxWidth = `${wantedWidth}px`;
+
             const quickActions = popup.querySelector('.ss-report-popup-quick');
             if (quickActions && quickActions.scrollWidth > quickActions.clientWidth) {
                 wantedWidth = Math.min(maximumWidth, wantedWidth + quickActions.scrollWidth - quickActions.clientWidth + 2);
                 popup.style.width = `${wantedWidth}px`;
                 popup.style.maxWidth = `${wantedWidth}px`;
-            }
-            if (Math.abs(scale - 1) < 0.005) {
-                popup.style.position = original.position;
-                popup.style.left = original.left;
-                popup.style.top = original.top;
-                popup.style.transform = original.transform;
-                popup.style.transformOrigin = original.transformOrigin;
-                popup.style.maxHeight = original.maxHeight;
-            } else {
-                popup.style.position = 'fixed';
-                popup.style.left = `${original.x}%`;
-                popup.style.top = `${original.y}%`;
-                popup.style.transformOrigin = 'center center';
-                popup.style.transform = `translate(-50%, -50%) scale(${original.scale * scale})`;
-                popup.style.maxHeight = `${Math.max(1, window.innerHeight - 20) / scale}px`;
             }
         }
 
@@ -1456,7 +1374,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             measure.remove();
 
             const popup = document.getElementById('reportInfoPopup');
-            if (!popup || !reportPopupSizeState) return;
+            if (!popup || popup.style.display === 'none') return;
             const gutter = Math.max(0, popup.offsetWidth - reason.clientWidth);
             reportPopupReasonRequiredWidth = reportPopupReasonCount >= 4 ? textWidth + gutter + 22 : 0;
             keepReportPopupSize();
@@ -1466,16 +1384,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 reason.style.fontSize = `${startingSize * availableWidth / textWidth}px`;
             }
         }
-
-        function updateReportPopupLayout() {
-            keepReportPopupSize();
-            const popup = document.getElementById('reportInfoPopup');
-            if (popup && popup.style.display !== 'none') {
-                fitReportPopupReason(popup.querySelector('#report_popup_reason'));
-            }
-        }
-        window.addEventListener('resize', updateReportPopupLayout);
-        if (window.visualViewport) window.visualViewport.addEventListener('resize', updateReportPopupLayout);
 
         function ensureReportsDiscordIcon(reportsBox) {
             const heading = reportsBox?.querySelector('.ss-report-heading-group');
@@ -1646,7 +1554,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     </div>
                 `;
 
-                // Add newer reporter name tags without changing the original log row HTML.
                 if (reporterNameTagMarkup) {
                     const serverLine = reportRow.querySelector('.ss-report-server-line');
                     const recentBadge = serverLine?.querySelector('.ss-report-recent-badge');
