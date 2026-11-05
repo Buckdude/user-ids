@@ -42,7 +42,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/admin';
-        const GITHUB_REPORT_TAGS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/tags';
+        const GITHUB_REPORT_TAGS_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/admin';
         const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
         const GITHUB_REFRESH_MS = 15000;
         const GITHUB_MODERATION_REFRESH_MS = 30000;
@@ -193,11 +193,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (!/^\d+$/.test(pid) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
                 const name = typeof entry.name === 'string' ? entry.name.trim() : '';
                 const nickname = typeof entry.nickname === 'string' ? entry.nickname.trim() : '';
+                const rawDiscordId = String(entry.discord_id ?? entry.discordId ?? '').trim();
+                const discordId = /^\d+$/.test(rawDiscordId) ? rawDiscordId : '';
                 const tags = Array.isArray(entry.tags)
                     ? entry.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim().toLowerCase()).filter(Boolean)
                     : [];
                 if (!name && !nickname && tags.length === 0) continue;
-                next.set(pid, { name, nickname, tags });
+                next.set(pid, { name, nickname, tags, discordId });
             }
             githubNameTagsEnabled = Array.from(next.values()).some(entry => !!(entry.name || entry.nickname));
             githubPlayerTags = next;
@@ -220,6 +222,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (!githubNameTagsEnabled) return '';
             const entry = getGithubPlayer(playerId);
             return entry ? (entry.nickname || entry.name || '') : '';
+        }
+
+        function getGithubDiscordId(playerId) {
+            return getGithubPlayer(playerId)?.discordId || '';
         }
 
         function hasGithubRole(playerId, role) {
@@ -260,6 +266,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             'cheater | CHEATER | CHEATER | #FFFFFF | #900100',
             'bot | BOT | BOT | #FFFFFF | #900100',
             'toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24',
+            'name | {name} | {name} | #FFFFFF | #0C576F',
         ];
         const GITHUB_REPORT_TAGS_CACHE_KEY = 'ss-live-reports-custom-tag-definitions';
         const REPORT_TAGS_REFRESH_MS = 15000;
@@ -278,10 +285,14 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 if (used.has(key)) throw new Error('Duplicate tag key: ' + key);
                 if (!popupName || !logName || popupName.length > 80 || logName.length > 80)
                     throw new Error('Invalid tag label: ' + key);
+                if ((popupName === '{name}') !== (logName === '{name}'))
+                    throw new Error('Name group must use {name} in both popup and log: ' + key);
+                if (key === 'name' && popupName !== '{name}')
+                    throw new Error('The reserved name key must use {name}: ' + key);
                 if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(textColor) ||
                     !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(backgroundColor))
                     throw new Error('Invalid hex color: ' + key);
-                parsed.push({ key, popupName, logName, textColor, backgroundColor });
+                parsed.push({ key, popupName, logName, textColor, backgroundColor, isNameGroup: popupName === '{name}' });
                 used.add(key);
             }
             if (!parsed.length) throw new Error('No tags defined');
@@ -291,7 +302,89 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         let reportTagDefinitions = parseReportTagDefinitions(DEFAULT_REPORT_TAG_LINES.join('\n'));
 
         function getOrderedReportTagKeys(playerId) {
-            return reportTagDefinitions.map(tag => tag.key);
+            return reportTagDefinitions.filter(tag => !tag.isNameGroup).map(tag => tag.key);
+        }
+
+        function getReportNameStyle(playerId) {
+            const playerTags = getGithubPlayer(playerId)?.tags || [];
+            return reportTagDefinitions.find(tag => tag.isNameGroup && tag.key !== 'name' && playerTags.includes(tag.key)) ||
+                reportTagDefinitions.find(tag => tag.isNameGroup && tag.key === 'name') || null;
+        }
+
+        const reportNameCopyTimers = new WeakMap();
+        async function copyReportNameDiscordId(discordId, badge) {
+            if (!/^\d+$/.test(String(discordId || ''))) return;
+            clearTimeout(reportNameCopyTimers.get(badge));
+            badge.classList.add('ss-copied');
+            reportNameCopyTimers.set(badge, setTimeout(() => {
+                badge.classList.remove('ss-copied');
+                reportNameCopyTimers.delete(badge);
+            }, 200));
+            try {
+                if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+                await navigator.clipboard.writeText(discordId);
+            } catch (_) {
+                const field = document.createElement('textarea');
+                field.value = discordId;
+                field.style.position = 'fixed';
+                field.style.opacity = '0';
+                document.body.appendChild(field);
+                field.select();
+                document.execCommand('copy');
+                field.remove();
+            }
+        }
+
+        document.addEventListener('click', event => {
+            const badge = event.target?.closest?.('#reportInfoPopup .ss-report-name-badge, #custom-reports-panel .ss-report-name-badge');
+            if (!badge) return;
+            event.stopPropagation();
+            if (badge.dataset.ssDiscordId) copyReportNameDiscordId(badge.dataset.ssDiscordId, badge);
+        }, true);
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            const badge = event.target?.closest?.('#reportInfoPopup .ss-report-name-badge, #custom-reports-panel .ss-report-name-badge');
+            if (!badge || !badge.dataset.ssDiscordId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            copyReportNameDiscordId(badge.dataset.ssDiscordId, badge);
+        }, true);
+
+        function updatePopupNameBadge(badge, playerId) {
+            if (!badge) return false;
+            const displayName = getGithubNameTag(playerId);
+            const style = getReportNameStyle(playerId);
+            const visible = !!(displayName && style);
+            badge.textContent = visible ? displayName : '';
+            badge.style.display = visible ? 'inline-block' : 'none';
+            badge.classList.add('ss-report-name-badge');
+            if (style) {
+                badge.style.setProperty('color', style.textColor, 'important');
+                badge.style.setProperty('background', style.backgroundColor, 'important');
+            }
+            const discordId = visible ? getGithubDiscordId(playerId) : '';
+            if (discordId) {
+                badge.dataset.ssDiscordId = discordId;
+                badge.title = 'Click to copy Discord ID';
+                badge.setAttribute('role', 'button');
+                badge.setAttribute('tabindex', '0');
+            } else {
+                delete badge.dataset.ssDiscordId;
+                badge.removeAttribute('title');
+                badge.removeAttribute('role');
+                badge.removeAttribute('tabindex');
+            }
+            return visible;
+        }
+
+        function makeLogNameBadge(playerId, extraClass = '') {
+            const displayName = getGithubNameTag(playerId);
+            const style = getReportNameStyle(playerId);
+            if (!displayName || !style) return '';
+            const discordId = getGithubDiscordId(playerId);
+            const copyAttributes = discordId
+                ? ` data-ss-discord-id="${discordId}" title="Click to copy Discord ID" role="button" tabindex="0"` : '';
+            return `<span class="ss-report-tag ss-report-tag-nametag ss-report-name-badge${extraClass ? ' ' + extraClass : ''}" style="color: ${style.textColor} !important; background: ${style.backgroundColor} !important;"${copyAttributes}>${escapeGithubTag(displayName)}</span>`;
         }
 
         function hasReportTag(key, name, playerId) {
@@ -335,7 +428,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         function renderPopupRoleTags(container, name, playerId) {
             if (!container) return;
             const prefix = container.id === 'report_popup_user_tags' ? 'report_popup_' : 'report_popup_reporter_';
-            const allowedKeys = new Set(reportTagDefinitions.map(tag => tag.key));
+            const allowedKeys = new Set(reportTagDefinitions.filter(tag => !tag.isNameGroup).map(tag => tag.key));
             const existing = Array.from(container.querySelectorAll(':scope > .ss-report-tag'));
             const sizeReference = existing.find(tag => tag.dataset.ssTagKey && tag.style.fontSize) ||
                 existing.find(tag => tag.style.fontSize) || null;
@@ -352,6 +445,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             }
 
             for (const tag of reportTagDefinitions) {
+                if (tag.isNameGroup) continue;
                 const suffix = REPORT_POPUP_LEGACY_TAG_IDS[tag.key] || `custom_${tag.key}`;
                 const id = `${prefix}${suffix}_label`;
                 let element = container.querySelector(`#${id}`);
@@ -474,14 +568,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 const nameLabel = popup.querySelector(`#${prefix}name_label`);
                 const tagsEl = popup.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
                 if (!nameLabel || !tagsEl) continue;
-                const displayName = getGithubNameTag(pid);
-                nameLabel.textContent = displayName;
-                nameLabel.style.display = displayName ? 'inline-block' : 'none';
-                if (prefix === 'report_popup_' || prefix === 'report_popup_reporter_') {
-                    const wrapId = prefix === 'report_popup_' ? 'report_popup_name_tag_wrap' : 'report_popup_reporter_name_tag_wrap';
-                    const nameTagWrap = popup.querySelector(`#${wrapId}`);
-                    if (nameTagWrap) nameTagWrap.style.display = displayName ? 'flex' : 'none';
-                }
+                const visibleName = updatePopupNameBadge(nameLabel, pid);
+                const wrapId = prefix === 'report_popup_' ? 'report_popup_name_tag_wrap' : 'report_popup_reporter_name_tag_wrap';
+                const nameTagWrap = popup.querySelector(`#${wrapId}`);
+                if (nameTagWrap) nameTagWrap.style.display = visibleName ? 'flex' : 'none';
 
             }
             refreshOpenPopupModerationTags();
@@ -534,7 +624,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (reportTagDefinitionsLoading) return;
             reportTagDefinitionsLoading = true;
             try {
-                const raw = await readGithubHubText(GITHUB_REPORT_TAGS_URL);
+                const links = JSON.parse(await readGithubHubText(GITHUB_REPORT_TAGS_LINKS_URL));
+                const tagsUrl = links?.GITHUB_REPORT_TAGS_URL;
+                if (!isGithubRawUrl(tagsUrl)) throw new Error('Set GITHUB_REPORT_TAGS_URL in /admin');
+                const raw = await readGithubHubText(tagsUrl);
                 const definitions = parseReportTagDefinitions(raw);
                 if (JSON.stringify(definitions) !== JSON.stringify(reportTagDefinitions)) {
                     reportTagDefinitions = definitions;
@@ -1030,6 +1123,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 padding: calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit));
                 border-radius: calc(4 * var(--ss-report-unit)); white-space: nowrap;
             }
+            .ss-report-name-badge.ss-copied { opacity: 0.5 !important; }
+            .ss-report-name-badge[data-ss-discord-id] { cursor: pointer; }
             #custom-reports-panel .ss-report-reporter-nametag {
                 display: inline-block; color: #fff !important;
                 font-size: calc(9 * var(--ss-report-unit)) !important;
@@ -1631,16 +1726,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     ? new Date(report.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
                     : '';
                 const originalReportName = String(report.name ?? '');
-                const githubNameTag = getGithubNameTag(report.pid);
                 const reporterIdMatch = String(report.reporter ?? '').match(/\[(\d+)\]\s*$/);
-                const reporterGithubNameTag = reporterIdMatch ? getGithubNameTag(reporterIdMatch[1]) : '';
-                const reporterNameTagMarkup = reporterGithubNameTag
-                    ? `<span class="ss-report-tag ss-report-tag-nametag ss-report-reporter-nametag">${escapeGithubTag(reporterGithubNameTag)}</span>` : '';
+                const reporterNameTagMarkup = reporterIdMatch ? makeLogNameBadge(reporterIdMatch[1], 'ss-report-reporter-nametag') : '';
                 const orderedLogBadges = reportTagDefinitions
-                    .filter(tag => hasReportTag(tag.key, report.name, report.pid))
+                    .filter(tag => !tag.isNameGroup && hasReportTag(tag.key, report.name, report.pid))
                     .map(tag => `<span class="ss-report-tag ss-report-tag-${tag.key}" style="color: ${tag.textColor} !important; background: ${tag.backgroundColor} !important;${tag.key === 'script_dev' ? ' box-shadow: none !important;' : ''}">${escapeGithubTag(tag.logName)}</span>`)
                     .join('');
-                const logBadgeMarkup = `${githubNameTag ? `<span class="ss-report-tag ss-report-tag-nametag">${escapeGithubTag(githubNameTag)}</span>` : ''}${orderedLogBadges}`;
+                const logBadgeMarkup = `${makeLogNameBadge(report.pid)}${orderedLogBadges}`;
                 const reportRow = document.createElement('div');
                 reportRow.className = "player-challenge-single box_relative display-flex align-items-center f_row";
                 reportRow.style.height = "auto";
@@ -1777,11 +1869,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
 
                     window.currentSelectedReport = report;
                     title.innerText = originalReportName;
-                    const nameTag = getGithubNameTag(report.pid);
                     const nameLabelEl = popup.querySelector('#report_popup_name_label');
                     const nameTagWrap = popup.querySelector('#report_popup_name_tag_wrap');
-                    if (nameLabelEl) { nameLabelEl.textContent = nameTag; nameLabelEl.style.display = nameTag ? 'inline-block' : 'none'; }
-                    if (nameTagWrap) nameTagWrap.style.display = nameTag ? 'flex' : 'none';
+                    const nameVisible = updatePopupNameBadge(nameLabelEl, report.pid);
+                    if (nameTagWrap) nameTagWrap.style.display = nameVisible ? 'flex' : 'none';
 
                     const recentCount = Number(report.recentReports) || 0;
                     recentEl.style.display = recentCount > 0 ? '' : 'none';
@@ -1805,11 +1896,10 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     reporterName.textContent = reporterPlayerName;
                     reporterId.textContent = reporterPlayerId;
                     reporterIdLine.style.display = reporterMatch ? 'block' : 'none';
-                    const reporterNameTag = getGithubNameTag(reporterPlayerId);
                     const reporterNameTagLabel = popup.querySelector('#report_popup_reporter_name_label');
                     const reporterNameTagWrap = popup.querySelector('#report_popup_reporter_name_tag_wrap');
-                    if (reporterNameTagLabel) { reporterNameTagLabel.textContent = reporterNameTag; reporterNameTagLabel.style.display = reporterNameTag ? 'inline-block' : 'none'; }
-                    if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameTag ? 'flex' : 'none';
+                    const reporterNameVisible = updatePopupNameBadge(reporterNameTagLabel, reporterPlayerId);
+                    if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameVisible ? 'flex' : 'none';
 
                     reason.innerText = report.reason;
                     const hasMultipleReasons = /,|;|\/|\s+&\s+|\s+and\s+/i.test(report.reason);
