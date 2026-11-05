@@ -42,6 +42,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
         }
 
         const GITHUB_LINKS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/admin';
+        const GITHUB_REPORT_TAGS_URL = 'https://raw.githubusercontent.com/Buckdude/user-ids/refs/heads/main/tags';
         const GITHUB_LINKS_CACHE_KEY = 'ss-live-reports-links-hub';
         const GITHUB_REFRESH_MS = 15000;
         const GITHUB_MODERATION_REFRESH_MS = 30000;
@@ -101,25 +102,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             const reporterMatch = report.reporter.match(/^(.*?)\s*\[(\d+)\]\s*$/);
             const reporterName = reporterMatch ? reporterMatch[1].trim() : report.reporter;
             const reporterId = reporterMatch ? reporterMatch[2] : '';
-            for (const [prefix, name, pid] of [
-                ['report_popup_', report.name, report.pid],
-                ['report_popup_reporter_', reporterName, reporterId]
-            ]) {
-                const label = popup.querySelector(`#${prefix}cheater_label`);
-                const toxicLabel = popup.querySelector(`#${prefix}toxic_label`);
-                const botLabel = popup.querySelector(`#${prefix}bot_label`);
-                const tagsEl = popup.querySelector(`#${prefix === 'report_popup_' ? 'report_popup_user_tags' : 'report_popup_reporter_tags'}`);
-                const nameLabel = getReportNameLabel(name, pid);
-                const isCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
-                if (label) {
-                    label.style.display = isCheater ? 'inline-block' : 'none';
-                    if (isCheater) label.textContent = nameLabel;
-                }
-                if (toxicLabel) toxicLabel.style.display = isToxicPlayer(name, pid) ? 'inline-block' : 'none';
-                if (botLabel) botLabel.style.display = isBotPlayer(name) ? 'inline-block' : 'none';
-                orderPopupReportTags(tagsEl, pid);
-                if (tagsEl) tagsEl.style.display = Array.from(tagsEl.children).some(child => child.style.display !== 'none') ? 'flex' : 'none';
-            }
+            renderPopupRoleTags(popup.querySelector('#report_popup_user_tags'), report.name, report.pid);
+            renderPopupRoleTags(popup.querySelector('#report_popup_reporter_tags'), reporterName, reporterId);
+            keepReportPopupSize();
         }
 
         function loadGitHubToxicList() {
@@ -260,45 +245,77 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             return hasGithubRole(playerId, 'wizard');
         }
 
-        function getOrderedReportTagKeys(playerId) {
-            const knownKeys = new Set([
-                'script_dev',
-                'wizard',
-                'archwizard',
-                'mod',
-                'eggforcer',
-                'leaguemod',
-                'league',
-                'ccmod',
-                'cc',
-                'excc',
-                'member',
-                'cheater',
-                'bot',
-                'toxic',
-            ]);
-            return [...knownKeys];
+        const DEFAULT_REPORT_TAG_LINES = [
+            'script_dev | SCRIPT DEV | DEV | #C2FBBF | #000000',
+            'wizard | WIZARD | WIZARD | #FFFFFF | #3498DB',
+            'archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694',
+            'mod | BWD MOD | MOD | #FFFFFF | #0029FF',
+            'eggforcer | EGGFORCER | EGGFORCER | #FFFFFF | #71368A',
+            'leaguemod | LEAGUE MOD | LEAGUE MOD | #FFFFFF | #05800C',
+            'league | LEAGUE REP | LEAGUE | #FFFFFF | #006105',
+            'ccmod | CONTENT CREATOR MOD | CC MOD | #FFFFFF | #9E6BFF',
+            'cc | CONTENT CREATOR | CC | #FFFFFF | #E91E63',
+            'excc | EX CONTENT CREATOR | EX CC | #FFFFFF | #AB1045',
+            'member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5',
+            'cheater | CHEATER | CHEATER | #FFFFFF | #900100',
+            'bot | BOT | BOT | #FFFFFF | #900100',
+            'toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24',
+        ];
+        const GITHUB_REPORT_TAGS_CACHE_KEY = 'ss-live-reports-custom-tag-definitions';
+        const REPORT_TAGS_REFRESH_MS = 15000;
+        let reportTagDefinitionsLoading = false;
+
+        function parseReportTagDefinitions(source) {
+            const parsed = [];
+            const used = new Set();
+            for (const raw of String(source).split(/\r?\n/)) {
+                const line = raw.trim();
+                if (!line || line.startsWith('#')) continue;
+                const values = line.split('|').map(value => value.trim());
+                if (values.length !== 5) throw new Error('Tag must have exactly 5 fields: ' + line);
+                const [key, popupName, logName, textColor, backgroundColor] = values;
+                if (!/^[a-z][a-z0-9_]*$/.test(key)) throw new Error('Invalid tag key: ' + key);
+                if (used.has(key)) throw new Error('Duplicate tag key: ' + key);
+                if (!popupName || !logName || popupName.length > 80 || logName.length > 80)
+                    throw new Error('Invalid tag label: ' + key);
+                if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(textColor) ||
+                    !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(backgroundColor))
+                    throw new Error('Invalid hex color: ' + key);
+                parsed.push({ key, popupName, logName, textColor, backgroundColor });
+                used.add(key);
+            }
+            if (!parsed.length) throw new Error('No tags defined');
+            return parsed;
         }
+
+        let reportTagDefinitions = parseReportTagDefinitions(DEFAULT_REPORT_TAG_LINES.join('\n'));
+
+        function getOrderedReportTagKeys(playerId) {
+            return reportTagDefinitions.map(tag => tag.key);
+        }
+
+        function hasReportTag(key, name, playerId) {
+            if (key === 'script_dev') return isScriptDevPlayer(playerId);
+            if (key === 'member') return isBwdMemberPlayer(playerId);
+            if (key === 'cheater') return ['CHEATER', 'KNOWN CHEATER'].includes(getReportNameLabel(name, playerId)) || hasGithubRole(playerId, key);
+            if (key === 'bot') return isBotPlayer(name) || hasGithubRole(playerId, key);
+            if (key === 'toxic') return isToxicPlayer(name, playerId);
+            return hasGithubRole(playerId, key);
+        }
+
+        const REPORT_POPUP_LEGACY_TAG_IDS = {
+            script_dev: 'script_dev', wizard: 'wizard', archwizard: 'archwizard',
+            mod: 'mod', eggforcer: 'eggforcer', leaguemod: 'leaguemod', league: 'league',
+            ccmod: 'ccmod', cc: 'creator', excc: 'excc', member: 'member',
+            cheater: 'cheater', bot: 'bot', toxic: 'toxic'
+        };
 
         function orderPopupReportTags(tagsElement, playerId) {
             if (!tagsElement) return;
-            const order = getOrderedReportTagKeys(playerId);
-            const suffixToKey = {
-                script_dev_label: 'script_dev',
-                ccmod_label: 'ccmod',
-                excc_label: 'excc', leaguemod_label: 'leaguemod', mod_label: 'mod', league_label: 'league',
-                archwizard_label: 'archwizard',
-                eggforcer_label: 'eggforcer',
-                creator_label: 'cc', member_label: 'member', wizard_label: 'wizard',
-                cheater_label: 'cheater', toxic_label: 'toxic', bot_label: 'bot'
-            };
             tagsElement.querySelectorAll(':scope > .ss-report-tag-row-break').forEach(element => element.remove());
+            const order = getOrderedReportTagKeys(playerId);
             const children = Array.from(tagsElement.children);
-            const keyOf = element => {
-                const suffix = Object.keys(suffixToKey).find(s => element.id.endsWith(s));
-                return suffix ? suffixToKey[suffix] : '';
-            };
-            children.sort((a, b) => order.indexOf(keyOf(a)) - order.indexOf(keyOf(b)));
+            children.sort((a, b) => order.indexOf(a.dataset.ssTagKey) - order.indexOf(b.dataset.ssTagKey));
             children.forEach(element => tagsElement.appendChild(element));
             if (!['report_popup_user_tags', 'report_popup_reporter_tags'].includes(tagsElement.id)) return;
             const visibleTags = children.filter(element => element.style.display !== 'none');
@@ -313,6 +330,51 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 visibleTags[placed - 1].insertAdjacentElement('afterend', breakElement);
                 remaining -= rowSize;
             }
+        }
+
+        function renderPopupRoleTags(container, name, playerId) {
+            if (!container) return;
+            const prefix = container.id === 'report_popup_user_tags' ? 'report_popup_' : 'report_popup_reporter_';
+            const allowedKeys = new Set(reportTagDefinitions.map(tag => tag.key));
+            const existing = Array.from(container.querySelectorAll(':scope > .ss-report-tag'));
+            const sizeReference = existing.find(tag => tag.dataset.ssTagKey && tag.style.fontSize) ||
+                existing.find(tag => tag.style.fontSize) || null;
+            const lockedMetrics = sizeReference ? [
+                'font-size', 'line-height', 'padding-top', 'padding-right',
+                'padding-bottom', 'padding-left', 'border-radius', 'margin-top', 'margin-bottom'
+            ].map(property => [property, sizeReference.style.getPropertyValue(property), sizeReference.style.getPropertyPriority(property)]) : [];
+
+            for (const element of existing) {
+                if (element.dataset.ssTagKey && allowedKeys.has(element.dataset.ssTagKey)) continue;
+                const legacyKey = Object.keys(REPORT_POPUP_LEGACY_TAG_IDS).find(key =>
+                    element.id === `${prefix}${REPORT_POPUP_LEGACY_TAG_IDS[key]}_label`);
+                if (!legacyKey || !allowedKeys.has(legacyKey)) element.remove();
+            }
+
+            for (const tag of reportTagDefinitions) {
+                const suffix = REPORT_POPUP_LEGACY_TAG_IDS[tag.key] || `custom_${tag.key}`;
+                const id = `${prefix}${suffix}_label`;
+                let element = container.querySelector(`#${id}`);
+                if (!element) {
+                    element = document.createElement('span');
+                    element.id = id;
+                    element.className = `ss-report-tag ss-report-tag-${tag.key}`;
+                    for (const [property, value, priority] of lockedMetrics) {
+                        if (value) element.style.setProperty(property, value, priority || 'important');
+                    }
+                    container.appendChild(element);
+                }
+                element.dataset.ssTagKey = tag.key;
+                const isKnownCheater = tag.key === 'cheater' && getReportNameLabel(name, playerId) === 'KNOWN CHEATER';
+                element.textContent = isKnownCheater && tag.popupName === 'CHEATER' ? 'KNOWN CHEATER' : tag.popupName;
+                element.style.setProperty('color', tag.textColor, 'important');
+                element.style.setProperty('background', tag.backgroundColor, 'important');
+                if (tag.key === 'script_dev') element.style.setProperty('box-shadow', 'none', 'important');
+                element.style.display = hasReportTag(tag.key, name, playerId) ? 'inline-block' : 'none';
+            }
+            orderPopupReportTags(container, playerId);
+            container.style.display = Array.from(container.children).some(element =>
+                element.classList.contains('ss-report-tag') && element.style.display !== 'none') ? 'flex' : 'none';
         }
 
         function escapeGithubTag(value) {
@@ -420,25 +482,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     const nameTagWrap = popup.querySelector(`#${wrapId}`);
                     if (nameTagWrap) nameTagWrap.style.display = displayName ? 'flex' : 'none';
                 }
-                const roles = {
-                    script_dev_label: isScriptDevPlayer(pid),
-                    ccmod_label: hasGithubRole(pid, 'ccmod'),
-                    excc_label: hasGithubRole(pid, 'excc'),
-                    mod_label: hasGithubRole(pid, 'mod'),
-                    league_label: hasGithubRole(pid, 'league'),
-                    leaguemod_label: hasGithubRole(pid, 'leaguemod'),
-                    archwizard_label: hasGithubRole(pid, 'archwizard'),
-                    creator_label: hasGithubRole(pid, 'cc'),
-                    member_label: isBwdMemberPlayer(pid),
-                    eggforcer_label: hasGithubRole(pid, 'eggforcer'),
-                    wizard_label: isWizardPlayer(pid)
-                };
-                for (const [suffix, enabled] of Object.entries(roles)) {
-                    const label = popup.querySelector(`#${prefix}${suffix}`);
-                    if (label) label.style.display = enabled ? 'inline-block' : 'none';
-                }
-                orderPopupReportTags(tagsEl, pid);
-                tagsEl.style.display = Array.from(tagsEl.children).some(child => child.style.display !== 'none') ? 'flex' : 'none';
+
             }
             refreshOpenPopupModerationTags();
             keepReportPopupSize();
@@ -486,6 +530,34 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 } catch (error) { browserFallback(error.message || String(error)); }
             });
         }
+        async function loadReportTagDefinitions() {
+            if (reportTagDefinitionsLoading) return;
+            reportTagDefinitionsLoading = true;
+            try {
+                const raw = await readGithubHubText(GITHUB_REPORT_TAGS_URL);
+                const definitions = parseReportTagDefinitions(raw);
+                if (JSON.stringify(definitions) !== JSON.stringify(reportTagDefinitions)) {
+                    reportTagDefinitions = definitions;
+                    renderReportsList(reportsArray);
+                    refreshOpenPopupGithubTags();
+                }
+                try { GM_setValue(GITHUB_REPORT_TAGS_CACHE_KEY, raw); } catch (_) {}
+            } catch (error) {
+                console.warn('[Reports] GitHub /tags unavailable or invalid, keeping last valid tags:', error.message || error);
+            } finally {
+                reportTagDefinitionsLoading = false;
+            }
+        }
+
+        try {
+            const cachedDefinitions = GM_getValue(GITHUB_REPORT_TAGS_CACHE_KEY, '');
+            if (cachedDefinitions) reportTagDefinitions = parseReportTagDefinitions(cachedDefinitions);
+        } catch (error) {
+            console.warn('[Reports] Cached /tags invalid, using original tags:', error);
+        }
+        loadReportTagDefinitions();
+        setInterval(loadReportTagDefinitions, REPORT_TAGS_REFRESH_MS);
+
         function useGithubLinkHub(links, force = false) {
             const tagUrlChanged = githubLinkHub?.GITHUB_USER_TAGS_URL !== links.GITHUB_USER_TAGS_URL;
             const moderationUrlChanged = HUB_REQUIRED_LINK_KEYS
@@ -1117,7 +1189,9 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 'closeReportPopupBtn'
             ];
             if (currentOverlay && currentPopup && currentPopup.parentElement === document.body &&
-                requiredPopupIds.every(id => currentPopup.querySelector(`#${id}`))) return;
+                requiredPopupIds.every(id => currentPopup.querySelector(`#${id}`) ||
+                    Object.values(REPORT_POPUP_LEGACY_TAG_IDS).some(role =>
+                        id === `report_popup_${role}_label` || id === `report_popup_reporter_${role}_label`))) return;
             if (currentOverlay) currentOverlay.remove();
             if (currentPopup) currentPopup.remove();
 
@@ -1413,7 +1487,6 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             popup.style.setProperty('max-height', `${Math.max(120, (window.innerHeight - 20) / visualScale)}px`, 'important');
         }
 
-
         window.addEventListener('resize', keepReportPopupSize);
         if (window.visualViewport) window.visualViewport.addEventListener('resize', keepReportPopupSize);
         let lastReportPopupZoom = getReportPopupVisualZoom();
@@ -1558,44 +1631,15 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     ? new Date(report.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
                     : '';
                 const originalReportName = String(report.name ?? '');
-                const reportNameLabel = getReportNameLabel(report.name, report.pid);
-                const isCheater = reportNameLabel === 'KNOWN CHEATER' || reportNameLabel === 'CHEATER';
-                const isToxic = isToxicPlayer(report.name, report.pid);
-                const isBot = isBotPlayer(report.name);
-                const isCreator = hasGithubRole(report.pid, 'cc');
-                const isCcMod = hasGithubRole(report.pid, 'ccmod');
-                const isExCc = hasGithubRole(report.pid, 'excc');
-                const isCommunityMod = hasGithubRole(report.pid, 'mod');
-                const isLeagueRep = hasGithubRole(report.pid, 'league');
-                const isLeagueMod = hasGithubRole(report.pid, 'leaguemod');
-                const isArchwizard = hasGithubRole(report.pid, 'archwizard');
-                const isMember = isBwdMemberPlayer(report.pid);
-                const isEggforcer = hasGithubRole(report.pid, 'eggforcer');
-                const isWizard = isWizardPlayer(report.pid);
-                const isScriptDev = isScriptDevPlayer(report.pid);
                 const githubNameTag = getGithubNameTag(report.pid);
                 const reporterIdMatch = String(report.reporter ?? '').match(/\[(\d+)\]\s*$/);
                 const reporterGithubNameTag = reporterIdMatch ? getGithubNameTag(reporterIdMatch[1]) : '';
                 const reporterNameTagMarkup = reporterGithubNameTag
                     ? `<span class="ss-report-tag ss-report-tag-nametag ss-report-reporter-nametag">${escapeGithubTag(reporterGithubNameTag)}</span>` : '';
-                const logBadgeHtmlByKey = {
-                    script_dev: isScriptDev ? '<span class="ss-report-tag ss-report-tag-script-dev">DEV</span>' : '',
-                    ccmod: isCcMod ? '<span class="ss-report-tag ss-report-tag-ccmod">CC MOD</span>' : '',
-                    excc: isExCc ? '<span class="ss-report-tag ss-report-tag-excc">EX CC</span>' : '',
-                    mod: isCommunityMod ? '<span class="ss-report-tag ss-report-tag-mod">MOD</span>' : '',
-                    league: isLeagueRep ? '<span class="ss-report-tag ss-report-tag-league">LEAGUE</span>' : '',
-                    leaguemod: isLeagueMod ? '<span class="ss-report-tag ss-report-tag-leaguemod">LEAGUE MOD</span>' : '',
-                    archwizard: isArchwizard ? '<span class="ss-report-tag ss-report-tag-archwizard">ARCHWIZARD</span>' : '',
-                    wizard: isWizard ? '<span class="ss-report-tag ss-report-tag-wizard">WIZARD</span>' : '',
-                    eggforcer: isEggforcer ? '<span class="ss-report-tag ss-report-tag-eggforcer">EGGFORCER</span>' : '',
-                    cc: isCreator ? '<span class="ss-report-tag ss-report-tag-creator">CC</span>' : '',
-                    member: isMember ? '<span class="ss-report-tag ss-report-tag-member">MEMBER</span>' : '',
-                    cheater: isCheater ? '<span class="ss-report-tag ss-report-tag-cheater">CHEATER</span>' : '',
-                    toxic: isToxic ? '<span class="ss-report-tag ss-report-tag-toxic">TOXIC</span>' : '',
-                    bot: isBot ? '<span class="ss-report-tag ss-report-tag-bot">BOT</span>' : ''
-                };
-                const orderedLogBadges = getOrderedReportTagKeys(report.pid)
-                    .map(key => logBadgeHtmlByKey[key] || '').join('');
+                const orderedLogBadges = reportTagDefinitions
+                    .filter(tag => hasReportTag(tag.key, report.name, report.pid))
+                    .map(tag => `<span class="ss-report-tag ss-report-tag-${tag.key}" style="color: ${tag.textColor} !important; background: ${tag.backgroundColor} !important;${tag.key === 'script_dev' ? ' box-shadow: none !important;' : ''}">${escapeGithubTag(tag.logName)}</span>`)
+                    .join('');
                 const logBadgeMarkup = `${githubNameTag ? `<span class="ss-report-tag ss-report-tag-nametag">${escapeGithubTag(githubNameTag)}</span>` : ''}${orderedLogBadges}`;
                 const reportRow = document.createElement('div');
                 reportRow.className = "player-challenge-single box_relative display-flex align-items-center f_row";
@@ -1720,83 +1764,32 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     if (!overlay || !popup) return;
                     const title = popup.querySelector('#report_popup_title');
                     const recentEl = popup.querySelector('#report_popup_recent');
-                    const userTags = popup.querySelector('#report_popup_user_tags');
-                    const cheaterLabel = popup.querySelector('#report_popup_cheater_label');
-                    const toxicLabel = popup.querySelector('#report_popup_toxic_label');
-                    const botLabel = popup.querySelector('#report_popup_bot_label');
-                    const creatorLabel = popup.querySelector('#report_popup_creator_label');
-                    const memberLabel = popup.querySelector('#report_popup_member_label');
                     const time = popup.querySelector('#report_popup_time');
                     const serverCode = popup.querySelector('#report_popup_server');
                     const playerId = popup.querySelector('#report_popup_pid_value');
                     const reporterName = popup.querySelector('#report_popup_reporter_name');
                     const reporterId = popup.querySelector('#report_popup_reporter_id');
                     const reporterIdLine = popup.querySelector('#report_popup_reporter_id_line');
-                    const reporterTags = popup.querySelector('#report_popup_reporter_tags');
-                    const reporterCheaterLabel = popup.querySelector('#report_popup_reporter_cheater_label');
-                    const reporterToxicLabel = popup.querySelector('#report_popup_reporter_toxic_label');
-                    const reporterBotLabel = popup.querySelector('#report_popup_reporter_bot_label');
-                    const reporterCreatorLabel = popup.querySelector('#report_popup_reporter_creator_label');
-                    const reporterMemberLabel = popup.querySelector('#report_popup_reporter_member_label');
-                    const reporterEggforcerLabel = popup.querySelector('#report_popup_reporter_eggforcer_label');
                     const reason = popup.querySelector('#report_popup_reason');
                     const reactionStatus = popup.querySelector('#report_popup_success');
-                    if (!title || !recentEl || !userTags || !cheaterLabel || !toxicLabel || !botLabel || !creatorLabel || !memberLabel || !time || !serverCode || !playerId || !reporterName || !reporterId || !reporterIdLine || !reporterTags || !reporterCheaterLabel || !reporterToxicLabel || !reporterBotLabel || !reporterCreatorLabel || !reporterMemberLabel || !reporterEggforcerLabel || !reason) return;
+                    if (!title || !recentEl || !time || !serverCode || !playerId ||
+                        !reporterName || !reporterId || !reporterIdLine || !reason) return;
 
                     window.currentSelectedReport = report;
                     title.innerText = originalReportName;
-                    const nameLabel = getReportNameLabel(report.name, report.pid);
-                    const showCheater = nameLabel === 'KNOWN CHEATER' || nameLabel === 'CHEATER';
-                    const showToxic = isToxicPlayer(report.name, report.pid);
-                    const showBot = isBotPlayer(report.name);
-                    const showCreator = hasGithubRole(report.pid, 'cc');
-                    const showCcMod = hasGithubRole(report.pid, 'ccmod');
-                    const showExCc = hasGithubRole(report.pid, 'excc');
-                    const showCommunityMod = hasGithubRole(report.pid, 'mod');
-                    const showLeagueRep = hasGithubRole(report.pid, 'league');
-                    const showLeagueMod = hasGithubRole(report.pid, 'leaguemod');
-                    const showArchwizard = hasGithubRole(report.pid, 'archwizard');
-                    const showMember = isBwdMemberPlayer(report.pid);
-                    const showEggforcer = hasGithubRole(report.pid, 'eggforcer');
-                    const showWizard = isWizardPlayer(report.pid);
-                    const showScriptDev = isScriptDevPlayer(report.pid);
                     const nameTag = getGithubNameTag(report.pid);
                     const nameLabelEl = popup.querySelector('#report_popup_name_label');
                     const nameTagWrap = popup.querySelector('#report_popup_name_tag_wrap');
-                    const eggforcerLabel = popup.querySelector('#report_popup_eggforcer_label');
-                    const wizardLabel = popup.querySelector('#report_popup_wizard_label');
-                    const scriptDevLabel = popup.querySelector('#report_popup_script_dev_label');
-                    const ccModLabel = popup.querySelector('#report_popup_ccmod_label');
-                    const exCcLabel = popup.querySelector('#report_popup_excc_label');
-                    const communityModLabel = popup.querySelector('#report_popup_mod_label');
-                    const leagueRepLabel = popup.querySelector('#report_popup_league_label');
-                    const leagueModLabel = popup.querySelector('#report_popup_leaguemod_label');
-                    const archwizardLabel = popup.querySelector('#report_popup_archwizard_label');
                     if (nameLabelEl) { nameLabelEl.textContent = nameTag; nameLabelEl.style.display = nameTag ? 'inline-block' : 'none'; }
                     if (nameTagWrap) nameTagWrap.style.display = nameTag ? 'flex' : 'none';
-                    if (eggforcerLabel) eggforcerLabel.style.display = showEggforcer ? 'inline-block' : 'none';
-                    if (wizardLabel) wizardLabel.style.display = showWizard ? 'inline-block' : 'none';
-                    if (scriptDevLabel) scriptDevLabel.style.display = showScriptDev ? 'inline-block' : 'none';
-                    if (ccModLabel) ccModLabel.style.display = showCcMod ? 'inline-block' : 'none';
-                    if (exCcLabel) exCcLabel.style.display = showExCc ? 'inline-block' : 'none';
-                    if (communityModLabel) communityModLabel.style.display = showCommunityMod ? 'inline-block' : 'none';
-                    if (leagueRepLabel) leagueRepLabel.style.display = showLeagueRep ? 'inline-block' : 'none';
-                    if (leagueModLabel) leagueModLabel.style.display = showLeagueMod ? 'inline-block' : 'none';
-                    if (archwizardLabel) archwizardLabel.style.display = showArchwizard ? 'inline-block' : 'none';
-                    userTags.style.display = showCheater || showToxic || showBot || showCreator || showMember || showEggforcer || showWizard || showScriptDev || showCcMod || showExCc || showCommunityMod || showLeagueRep || showLeagueMod || showArchwizard ? 'flex' : 'none';
-                    cheaterLabel.style.display = showCheater ? 'inline-block' : 'none';
-                    if (showCheater) cheaterLabel.textContent = nameLabel;
-                    toxicLabel.style.display = showToxic ? 'inline-block' : 'none';
-                    botLabel.style.display = showBot ? 'inline-block' : 'none';
-                    creatorLabel.style.display = showCreator ? 'inline-block' : 'none';
-                    memberLabel.style.display = showMember ? 'inline-block' : 'none';
+
                     const recentCount = Number(report.recentReports) || 0;
                     recentEl.style.display = recentCount > 0 ? '' : 'none';
                     if (recentCount > 0) {
                         recentEl.innerText = `${recentCount} RECENT REPORT${recentCount === 1 ? '' : 'S'}`;
                         recentEl.style.color = '#fff';
                         recentEl.style.backgroundColor = recentCount >= 10 ? '#000000' : recentCount >= 5 ? '#900100' : recentCount >= 3 ? '#cc0000' : recentCount === 2 ? '#f79520' : '#ffe600';
-                        const referenceTag = popup.querySelector('#report_popup_reporter_member_label');
+                        const referenceTag = popup.querySelector('#report_popup_reporter_member_label') || popup.querySelector('#report_popup_reporter_tags .ss-report-tag');
                         const referenceStyle = referenceTag ? getComputedStyle(referenceTag) : null;
                         recentEl.style.fontWeight = referenceStyle?.fontWeight || '900';
                         recentEl.style.fontSize = referenceStyle?.fontSize || '0.7em';
@@ -1812,50 +1805,12 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     reporterName.textContent = reporterPlayerName;
                     reporterId.textContent = reporterPlayerId;
                     reporterIdLine.style.display = reporterMatch ? 'block' : 'none';
-                    const reporterNameLabel = getReportNameLabel(reporterPlayerName, reporterPlayerId);
-                    const reporterCheater = reporterNameLabel === 'KNOWN CHEATER' || reporterNameLabel === 'CHEATER';
-                    const reporterToxic = isToxicPlayer(reporterPlayerName, reporterPlayerId);
-                    const reporterBot = isBotPlayer(reporterPlayerName);
-                    const reporterCreator = hasGithubRole(reporterPlayerId, 'cc');
-                    const reporterCcMod = hasGithubRole(reporterPlayerId, 'ccmod');
-                    const reporterExCc = hasGithubRole(reporterPlayerId, 'excc');
-                    const reporterCommunityMod = hasGithubRole(reporterPlayerId, 'mod');
-                    const reporterLeagueRep = hasGithubRole(reporterPlayerId, 'league');
-                    const reporterLeagueMod = hasGithubRole(reporterPlayerId, 'leaguemod');
-                    const reporterArchwizard = hasGithubRole(reporterPlayerId, 'archwizard');
-                    const reporterMember = isBwdMemberPlayer(reporterPlayerId);
-                    const reporterEggforcer = hasGithubRole(reporterPlayerId, 'eggforcer');
-                    const reporterWizard = isWizardPlayer(reporterPlayerId);
-                    const reporterScriptDev = isScriptDevPlayer(reporterPlayerId);
                     const reporterNameTag = getGithubNameTag(reporterPlayerId);
                     const reporterNameTagLabel = popup.querySelector('#report_popup_reporter_name_label');
                     const reporterNameTagWrap = popup.querySelector('#report_popup_reporter_name_tag_wrap');
-                    const reporterWizardLabel = popup.querySelector('#report_popup_reporter_wizard_label');
-                    const reporterScriptDevLabel = popup.querySelector('#report_popup_reporter_script_dev_label');
-                    const reporterCcModLabel = popup.querySelector('#report_popup_reporter_ccmod_label');
-                    const reporterExCcLabel = popup.querySelector('#report_popup_reporter_excc_label');
-                    const reporterCommunityModLabel = popup.querySelector('#report_popup_reporter_mod_label');
-                    const reporterLeagueRepLabel = popup.querySelector('#report_popup_reporter_league_label');
-                    const reporterLeagueModLabel = popup.querySelector('#report_popup_reporter_leaguemod_label');
-                    const reporterArchwizardLabel = popup.querySelector('#report_popup_reporter_archwizard_label');
                     if (reporterNameTagLabel) { reporterNameTagLabel.textContent = reporterNameTag; reporterNameTagLabel.style.display = reporterNameTag ? 'inline-block' : 'none'; }
                     if (reporterNameTagWrap) reporterNameTagWrap.style.display = reporterNameTag ? 'flex' : 'none';
-                    if (reporterWizardLabel) reporterWizardLabel.style.display = reporterWizard ? 'inline-block' : 'none';
-                    if (reporterScriptDevLabel) reporterScriptDevLabel.style.display = reporterScriptDev ? 'inline-block' : 'none';
-                    if (reporterCcModLabel) reporterCcModLabel.style.display = reporterCcMod ? 'inline-block' : 'none';
-                    if (reporterExCcLabel) reporterExCcLabel.style.display = reporterExCc ? 'inline-block' : 'none';
-                    if (reporterCommunityModLabel) reporterCommunityModLabel.style.display = reporterCommunityMod ? 'inline-block' : 'none';
-                    if (reporterLeagueRepLabel) reporterLeagueRepLabel.style.display = reporterLeagueRep ? 'inline-block' : 'none';
-                    if (reporterLeagueModLabel) reporterLeagueModLabel.style.display = reporterLeagueMod ? 'inline-block' : 'none';
-                    if (reporterArchwizardLabel) reporterArchwizardLabel.style.display = reporterArchwizard ? 'inline-block' : 'none';
-                    reporterTags.style.display = reporterCheater || reporterToxic || reporterBot || reporterCreator || reporterMember || reporterEggforcer || reporterWizard || reporterScriptDev || reporterCcMod || reporterExCc || reporterCommunityMod || reporterLeagueRep || reporterLeagueMod || reporterArchwizard ? 'flex' : 'none';
-                    reporterCheaterLabel.style.display = reporterCheater ? 'inline-block' : 'none';
-                    if (reporterCheater) reporterCheaterLabel.textContent = reporterNameLabel;
-                    reporterToxicLabel.style.display = reporterToxic ? 'inline-block' : 'none';
-                    reporterBotLabel.style.display = reporterBot ? 'inline-block' : 'none';
-                    reporterCreatorLabel.style.display = reporterCreator ? 'inline-block' : 'none';
-                    reporterMemberLabel.style.display = reporterMember ? 'inline-block' : 'none';
-                    reporterEggforcerLabel.style.display = reporterEggforcer ? 'inline-block' : 'none';
+
                     reason.innerText = report.reason;
                     const hasMultipleReasons = /,|;|\/|\s+&\s+|\s+and\s+/i.test(report.reason);
                     reportPopupReasonCount = String(report.reason).split(/,|;|\/|\s+&\s+|\s+and\s+/i).filter(part => part.trim()).length;
@@ -2009,6 +1964,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     }
                     fetchDiscordReports();
                     loadGithubLinkHub(true);
+                    loadReportTagDefinitions();
                 });
 
                 const syncReportsVisibility = () => {
