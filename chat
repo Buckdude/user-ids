@@ -7,6 +7,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     const STATE_KEY = `ss-modchat-${channelId}-read-v1`;
     const PENDING_KEY = `ss-modchat-${channelId}-pending-egg-v1`;
     const POLL_MS = 5000;
+    const CHAT_WINDOW_MS = 24 * 60 * 60 * 1000;
     const MAX_HISTORY = 500;
     const MAX_TRACKED = 1200;
     const ADMIN_CACHE_KEY = 'ss-live-reports-links-hub';
@@ -75,6 +76,34 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     function isEggMessage(message) {
         return (message.reactions || []).some(r =>
             !r.emoji?.id && r.emoji?.name === EGG && Number(r.count) > 0);
+    }
+    function getMessageTime(message) {
+        const timestamp = Date.parse(String(message.timestamp || ''));
+        if (Number.isFinite(timestamp)) return timestamp;
+        try { return Number((BigInt(message.id) >> 22n) + 1420070400000n); }
+        catch (_) { return NaN; }
+    }
+    function isRecentMessage(message) {
+        const timestamp = getMessageTime(message);
+        return Number.isFinite(timestamp) && timestamp >= Date.now() - CHAT_WINDOW_MS;
+    }
+    function isRecentMessageId(id) {
+        try { return Number((BigInt(id) >> 22n) + 1420070400000n) >= Date.now() - CHAT_WINDOW_MS; }
+        catch (_) { return false; }
+    }
+    function pruneOldChat() {
+        let changed = false;
+        for (const [id, message] of history) {
+            if (!isRecentMessage(message)) { history.delete(id); changed = true; }
+        }
+        for (const id of known) {
+            if (!isRecentMessageId(id)) { known.delete(id); changed = true; }
+        }
+        for (const id of unread) {
+            if (!isRecentMessageId(id)) { unread.delete(id); changed = true; }
+        }
+        if (changed) saveState();
+        return changed;
     }
     function getName(author) {
         return String(author?.username || author?.global_name || 'Unknown');
@@ -378,9 +407,11 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         return !!(me?.id && message.author?.id === me.id);
     }
     function takeMessages(messages, initial = false) {
+        pruneOldChat();
         let changed = false;
         for (const message of messages) {
             if (!message?.id || !/^\d+$/.test(message.id)) continue;
+            if (!isRecentMessage(message)) continue;
             if (!isEggMessage(message) || !getBody(message)) {
                 if (history.delete(message.id)) changed = true;
                 continue;
@@ -429,8 +460,10 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             if (messages.length) {
                 const oldest = messages[messages.length - 1].id;
                 if (!currentOldest || newer(currentOldest, oldest)) currentOldest = oldest;
+                if (!isRecentMessage(messages[messages.length - 1])) noMoreOlder = true;
             }
             takeMessages(messages);
+            updateOlderButton();
             if (open) status('');
         } catch (error) {
             if (open) status(`Chat unavailable: ${error.message || error}`);
@@ -439,7 +472,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         }
     }
     async function fetchOlder() {
-        if (loadingOlder || noMoreOlder || !currentOldest || Date.now() < nextRetry) return;
+        if (loadingOlder || noMoreOlder || !currentOldest || !isRecentMessageId(currentOldest) || Date.now() < nextRetry) return;
         loadingOlder = true;
         updateOlderButton();
         const previousScroll = document.getElementById('ss-modchat-messages')?.scrollHeight || 0;
@@ -448,7 +481,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             if (result.status !== 200) { status(`Older messages: Discord error ${result.status}.`); return; }
             const messages = JSON.parse(result.responseText);
             if (!Array.isArray(messages)) throw new Error('Invalid Discord messages.');
-            if (messages.length < 100) noMoreOlder = true;
+            if (messages.length < 100 || (messages.length && !isRecentMessage(messages[messages.length - 1]))) noMoreOlder = true;
             if (messages.length) {
                 currentOldest = messages[messages.length - 1].id;
                 takeMessages(messages, true);
@@ -470,11 +503,12 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     function updateOlderButton() {
         const btn = panel?.querySelector('#ss-modchat-older');
         if (!btn) return;
-        btn.style.display = noMoreOlder || !currentOldest ? 'none' : 'block';
+        btn.style.display = noMoreOlder || !currentOldest || !isRecentMessageId(currentOldest) ? 'none' : 'block';
         btn.disabled = loadingOlder;
         btn.textContent = loadingOlder ? 'loading...' : '';
     }
     function updateBadge() {
+        pruneOldChat();
         const icon = panel?.querySelector('#ss-modchat-toggle');
         const badge = icon?.querySelector('.ss-modchat-badge');
         if (!icon || !badge) return;
@@ -484,6 +518,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         icon.classList.toggle('ss-modchat-unread', count > 0 && !open);
     }
     function render() {
+        pruneOldChat();
         const list = panel?.querySelector('#ss-modchat-messages');
         if (!list || !open) return;
         const wasNearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 35;
@@ -644,10 +679,6 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             }
             #custom-reports-panel #ss-modchat-toggle .fas { color:inherit; }
             #custom-reports-panel.ss-modchat-active #ss-modchat-toggle { opacity:.2 !important; }
-            #custom-reports-panel #ss-modchat-toggle.ss-modchat-unread .fas {
-                animation:ss-modchat-flash 1s steps(1,end) infinite;
-            }
-            @keyframes ss-modchat-flash { 0%, 100% {color:#0d576f;} 50% {color:#fff100;} }
             #custom-reports-panel #ss-modchat-toggle .ss-modchat-badge {
                 position:absolute; top:0; right:0; transform:translate(50%,-40%);
                 display:none; align-items:center; justify-content:center;
@@ -826,6 +857,11 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     refreshIdentity();
     setInterval(ensureUI, 700);
     setInterval(fetchLatest, POLL_MS);
+    setInterval(() => {
+        if (pruneOldChat() && open) render();
+        updateBadge();
+        updateOlderButton();
+    }, 60000);
     setInterval(syncPendingEgg, 5000);
     setInterval(refreshIdentity, 3000);
     fetchLatest();
