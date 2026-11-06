@@ -36,19 +36,20 @@
     "19332092": {
       "name": "apollotheosis",
       "nickname": "Apollo",
-      "discord_id": "",
-      "tags": ["eggforcer", "member"]
+      "discord_id": "761571257971376158",
+      "tags": ["mod", "eggforcer", "member"]
     },
     "113976612": {
       "name": "dropoutbrent",
       "nickname": "",
-      "discord_id": "",
-      "tags": ["eggforcer", "member"]
+      "discord_id": "685259853014630500",
+      "tags": ["eggforcer", "cc", "member"]
+      "links": {"cc": "https://www.twitch.tv/dropoutbrent"}
     },
     "29122538": {
       "name": "foggier_2169",
       "nickname": "Foggier",
-      "discord_id": "",
+      "discord_id": "804551524294066237",
       "tags": ["eggforcer", "member"]
     },
     "33629946": {
