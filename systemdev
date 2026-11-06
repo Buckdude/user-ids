@@ -1719,7 +1719,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
             #custom-reports-panel #ss-reports-discord-copy {
                 display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-                color: #0c576f !important; background: transparent !important;
+                color: #fff100 !important; background: transparent !important;
                 border: none !important; border-radius: 0 !important;
                 box-shadow: none !important; text-shadow: none !important;
                 filter: none !important; -webkit-text-stroke: 0 !important;
@@ -1728,7 +1728,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 line-height: 1; opacity: 1; transition: opacity 0.2s;
             }
             #custom-reports-panel #ss-reports-discord-copy::before {
-                color: #0c576f !important; background: transparent !important;
+                color: #fff100 !important; background: transparent !important;
                 box-shadow: none !important; text-shadow: none !important; filter: none !important;
             }
             #custom-reports-panel #ss-reports-discord-copy::after { content: none !important; }
@@ -2214,12 +2214,13 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             if (!icon) {
                 icon = document.createElement('i');
                 icon.id = 'ss-reports-discord-copy';
-                icon.className = 'fab fa-discord';
+                icon.className = 'far fa-copy';
                 icon.setAttribute('role', 'button');
                 icon.setAttribute('tabindex', '0');
                 icon.setAttribute('aria-label', 'Copy Discord Token');
                 icon.title = 'Copy Discord Token';
             }
+            icon.className = 'far fa-copy';
             if (count.nextElementSibling !== icon) count.insertAdjacentElement('afterend', icon);
             const view = heading.querySelector('#ss-reports-view-toggle')?.textContent.trim().toLowerCase();
             icon.style.display = view === 'reports' ? 'inline-flex' : 'none';
@@ -2525,7 +2526,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                             <div class="ss-report-heading-group">
                                 <div class="clickme" id="ss-reports-view-toggle" style="font-size: 1em; cursor: pointer;" title="Switch between Reports and Action taken">Reports</div>
                                 <span id="ss-reports-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Action taken" title="View Action taken"></span>
-                                <i id="ss-reports-discord-copy" class="fab fa-discord" role="button" tabindex="0" aria-label="Copy Discord Token" title="Copy Discord Token"></i>
+                                <i id="ss-reports-discord-copy" class="far fa-copy" role="button" tabindex="0" aria-label="Copy Discord Token" title="Copy Discord Token"></i>
                                 <span id="ss-action-count" class="ss-action-count" role="button" tabindex="0" aria-label="View Reports" title="View Reports"></span>
                             </div>
                             <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;" id="ss-refresh-trigger" title="Force Refresh">
