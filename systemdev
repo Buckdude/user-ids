@@ -1719,7 +1719,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
             #custom-reports-panel .ss-report-heading-group { display: flex; align-items: center; gap: calc(5 * var(--ss-report-unit)); min-width: 0; }
             #custom-reports-panel #ss-reports-discord-copy {
                 display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-                color: #fff100 !important; background: transparent !important;
+                color: #0d576f !important; background: transparent !important;
                 border: none !important; border-radius: 0 !important;
                 box-shadow: none !important; text-shadow: none !important;
                 filter: none !important; -webkit-text-stroke: 0 !important;
@@ -1728,7 +1728,7 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                 line-height: 1; opacity: 1; transition: opacity 0.2s;
             }
             #custom-reports-panel #ss-reports-discord-copy::before {
-                color: #fff100 !important; background: transparent !important;
+                color: #0d576f !important; background: transparent !important;
                 box-shadow: none !important; text-shadow: none !important; filter: none !important;
             }
             #custom-reports-panel #ss-reports-discord-copy::after { content: none !important; }
