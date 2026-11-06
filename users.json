@@ -3,20 +3,23 @@
     "2458054": {
       "name": "wizardsupport",
       "nickname": "Wizups",
-      "discord_id": "",
-      "tags": ["wizard", "eggforcer"]
+      "discord_id": "474006005840216069",
+      "tags": ["wizard", "eggforcer"],
+      "links": {"wizard": "https://discord.com/invite/bluewizard"}
     },
     "77045034": {
       "name": "bwharrison",
       "nickname": "Harrison",
-      "discord_id": "",
-      "tags": ["wizard", "eggforcer"]
+      "discord_id": "978686292323872821",
+      "tags": ["wizard", "eggforcer"],
+      "links": {"wizard": "https://discord.com/invite/bluewizard"}
     },
     "97827574": {
       "name": "bwharrison",
       "nickname": "Harrison",
-      "discord_id": "",
-      "tags": ["wizard", "eggforcer"]
+      "discord_id": "978686292323872821",
+      "tags": ["wizard", "eggforcer"],
+      "links": {"wizard": "https://discord.com/invite/bluewizard"}
     },
     "106190": {
       "name": "fallenus",
@@ -196,7 +199,7 @@
       "nickname": "",
       "discord_id": "",
       "tags": ["leaguemod", "eggforcer", "cc", "member"],
-      "links": {"cc": "https://example.com"}
+      "links": {"cc": "https://www.twitch.tv/zamsgodz"}
     },
     "40630224": {
       "name": "wes1012",
