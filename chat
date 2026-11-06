@@ -359,7 +359,9 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         const label = new Date(timestamp).toLocaleTimeString('en-US', {
             hour: 'numeric', minute: '2-digit', hour12: true
         });
-        return makeBadge(timeTag, label);
+        const badge = makeBadge(timeTag, label);
+        badge.classList.add('ss-modchat-time-tag');
+        return badge;
     }
     function getBody(message) {
         const content = String(message.content || '').trim();
@@ -633,8 +635,10 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         css.textContent = `
             #custom-reports-panel #ss-modchat-toggle {
                 position:relative; display:inline-flex; align-items:center; justify-content:center;
-                flex:0 0 auto; background:none !important; border:0 !important; padding:0 2px !important;
-                margin:0; color:#ffffff !important; cursor:pointer; box-shadow:none !important;
+                flex:0 0 calc(20 * var(--ss-report-unit)); width:calc(20 * var(--ss-report-unit));
+                height:calc(20 * var(--ss-report-unit)); min-width:0 !important; min-height:0 !important;
+                background:none !important; border:0 !important; padding:0 !important;
+                margin:0; color:#fff100 !important; cursor:pointer; box-shadow:none !important;
                 font-size:calc(19 * var(--ss-report-unit)) !important; line-height:1;
                 text-shadow:none !important; opacity:1; transition:opacity .2s;
             }
@@ -643,15 +647,22 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             #custom-reports-panel #ss-modchat-toggle.ss-modchat-unread .fas {
                 animation:ss-modchat-flash 1s steps(1,end) infinite;
             }
-            @keyframes ss-modchat-flash { 0%, 100% {color:#ffffff;} 50% {color:#fff100;} }
+            @keyframes ss-modchat-flash { 0%, 100% {color:#fff100;} 50% {color:#ffffff;} }
             #custom-reports-panel #ss-modchat-toggle .ss-modchat-badge {
-                position:absolute; top:-7px; right:-9px; display:none; align-items:center; justify-content:center;
+                position:absolute; top:0; right:0; transform:translate(50%,-40%);
+                display:none; align-items:center; justify-content:center;
                 min-width:calc(15 * var(--ss-report-unit)); height:calc(15 * var(--ss-report-unit));
-                padding:0 2px; border-radius:9px; background:#fff100; color:#0c576f !important;
+                padding:0 calc(2 * var(--ss-report-unit)); border-radius:999px;
+                background:#ffffff !important; color:#0c576f !important;
                 font:700 calc(10 * var(--ss-report-unit))/1 Arial,sans-serif !important;
-                text-shadow:none !important; box-sizing:border-box;
+                text-shadow:none !important; box-sizing:border-box; white-space:nowrap;
+                pointer-events:none; z-index:1;
             }
-            #custom-reports-panel .ss-modchat-window {display:none; flex-direction:column; min-height:0; width:100%;background:#06baf7;}
+            #custom-reports-panel .ss-modchat-window {
+                display:none; flex-direction:column; min-height:0; width:100%;
+                height:calc(250 * var(--ss-report-unit)); max-height:calc(250 * var(--ss-report-unit));
+                overflow:hidden; background:#06baf7;
+            }
             #custom-reports-panel.ss-modchat-active .ss-modchat-window {display:flex !important;}
             #custom-reports-panel.ss-modchat-active .news-container {display:none !important;}
             #custom-reports-panel.ss-modchat-active #ss-reports-count,
@@ -660,9 +671,10 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             #custom-reports-panel #ss-modchat-older {
                 width:100%; background:transparent; color:#0c576f; border:0; cursor:pointer;
                 font-size:calc(10 * var(--ss-report-unit)); font-weight:700; padding:3px; min-height:20px;
+                flex:0 0 auto;
             }
             #custom-reports-panel #ss-modchat-messages {
-                display:flex; flex-direction:column; gap:4px; min-height:0; max-height:170px;
+                display:flex; flex-direction:column; gap:4px; flex:1 1 auto; min-height:0; max-height:none;
                 overflow-y:auto; overflow-x:hidden; padding:6px 7px; box-sizing:border-box;
                 background:#06baf7; font:calc(10 * var(--ss-report-unit))/1.3 Arial,sans-serif;
                 color:#0c576f; overflow-wrap:anywhere; white-space:pre-wrap;
@@ -673,12 +685,16 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             #custom-reports-panel .ss-modchat-message .ss-modchat-body {display:block; width:100%; color:#123d54; white-space:pre-wrap;}
             #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:2px;}
             #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important; font-size:calc(8 * var(--ss-report-unit)) !important; padding:calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;}
+            #custom-reports-panel .ss-modchat-tag.ss-modchat-time-tag {
+                font-size:calc(11 * var(--ss-report-unit)) !important;
+                padding:calc(2 * var(--ss-report-unit)) calc(5 * var(--ss-report-unit)) !important;
+            }
             #custom-reports-panel .ss-modchat-tag[role="button"] {cursor:pointer;}
             #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:10px 0;}
             #custom-reports-panel #ss-modchat-status {
-                display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
+                display:none; flex:0 0 auto; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
             }
-            #custom-reports-panel .ss-modchat-compose {display:block; padding:3px 6px;}
+            #custom-reports-panel .ss-modchat-compose {display:block; flex:0 0 auto; padding:3px 6px;}
             #custom-reports-panel #ss-modchat-input.chat.roundme_sm {
                 display:block !important; width:100% !important; min-width:0; box-sizing:border-box;
                 min-height:27px; margin:0; padding:4px 6px; outline:none;
