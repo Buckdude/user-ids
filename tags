@@ -21,3 +21,4 @@ bot | BOT | BOT | #FFFFFF | #CD0100 | | | #CD0100,#FFF100 | 0.3
 toxic | TOXIC | TOXIC | #FFFFFF | #7B4A24
 verified | {name} | {name} | #FFFFFF | #313338 | 1
 name | {name} | {name} | #FFFFFF | #0C576F | 1
+time | TIME | TIME | #0C576F | #06BAF7
