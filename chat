@@ -638,22 +638,22 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 flex:0 0 calc(20 * var(--ss-report-unit)); width:calc(20 * var(--ss-report-unit));
                 height:calc(20 * var(--ss-report-unit)); min-width:0 !important; min-height:0 !important;
                 background:none !important; border:0 !important; padding:0 !important;
-                margin:0; color:#fff100 !important; cursor:pointer; box-shadow:none !important;
+                margin:0; color:#0d576f !important; cursor:pointer; box-shadow:none !important;
                 font-size:calc(19 * var(--ss-report-unit)) !important; line-height:1;
                 text-shadow:none !important; opacity:1; transition:opacity .2s;
             }
-            #custom-reports-panel #ss-modchat-toggle .fas { color:inherit !important; }
+            #custom-reports-panel #ss-modchat-toggle .fas { color:inherit; }
             #custom-reports-panel.ss-modchat-active #ss-modchat-toggle { opacity:.2 !important; }
             #custom-reports-panel #ss-modchat-toggle.ss-modchat-unread .fas {
                 animation:ss-modchat-flash 1s steps(1,end) infinite;
             }
-            @keyframes ss-modchat-flash { 0%, 100% {color:#fff100;} 50% {color:#ffffff;} }
+            @keyframes ss-modchat-flash { 0%, 100% {color:#0d576f;} 50% {color:#fff100;} }
             #custom-reports-panel #ss-modchat-toggle .ss-modchat-badge {
                 position:absolute; top:0; right:0; transform:translate(50%,-40%);
                 display:none; align-items:center; justify-content:center;
                 min-width:calc(15 * var(--ss-report-unit)); height:calc(15 * var(--ss-report-unit));
                 padding:0 calc(2 * var(--ss-report-unit)); border-radius:999px;
-                background:#ffffff !important; color:#0c576f !important;
+                background:#fff100 !important; color:#0c576f !important;
                 font:700 calc(10 * var(--ss-report-unit))/1 Arial,sans-serif !important;
                 text-shadow:none !important; box-sizing:border-box; white-space:nowrap;
                 pointer-events:none; z-index:1;
