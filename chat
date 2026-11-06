@@ -625,6 +625,18 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 }, true);
             }
         }
+        const headingGroup = heading.closest('.ss-report-heading-group');
+        const arrangeHeader = () => {
+            const activeCount = headingGroup?.querySelector(getReportsView() === 'action' ? '#ss-action-count' : '#ss-reports-count');
+            if (activeCount && heading.nextElementSibling !== activeCount) heading.after(activeCount);
+            if (headingGroup && headingGroup.lastElementChild !== toggle) headingGroup.appendChild(toggle);
+        };
+        arrangeHeader();
+        if (headingGroup && !headingGroup._ssModChatHeaderObserver) {
+            const observer = new MutationObserver(arrangeHeader);
+            observer.observe(headingGroup, { childList: true, characterData: true, subtree: true });
+            headingGroup._ssModChatHeaderObserver = observer;
+        }
         if (!panel.querySelector('.ss-modchat-window')) {
             const windowEl = document.createElement('div');
             windowEl.className = 'ss-modchat-window';
