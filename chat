@@ -20,20 +20,6 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         archwizard: ['archwizard', 'arch_wizard'],
         leaguemod: ['leaguemod', 'league_mod']
     };
-    const FALLBACK_TAG_LINES = [
-        'dev | SCRIPT DEV | DEV | #C2FBBF | #000000',
-        'wizard | WIZARD | WIZARD | #FFFFFF | #3498DB',
-        'archwizard | ARCHWIZARD | ARCHWIZARD | #FFFFFF | #206694',
-        'mod | BWD MOD | MOD | #FFFFFF | #0029FF',
-        'eggforcer | EGGFORCER | EGGFORCER | #FFFFFF | #71368A',
-        'leaguemod | LEAGUE MOD | LEAGUE MOD | #FFFFFF | #05800C',
-        'league | LEAGUE REP | LEAGUE | #FFFFFF | #006105',
-        'ccmod | CONTENT CREATOR MOD | CC MOD | #FFFFFF | #9E6BFF',
-        'cc | CONTENT CREATOR | CC | #FFFFFF | #E91E63',
-        'excc | EX CONTENT CREATOR | Ex CC | #FFFFFF | #AB1045',
-        'member | BWD MEMBER | MEMBER | #FFFFFF | #3F51B5',
-        'name | {name} | {name} | #FFFFFF | #0C576F'
-    ].join('\n');
     const history = new Map();
     const known = new Set();
     const unread = new Set();
@@ -51,7 +37,7 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
     let noMoreOlder = false;
     let directory = new Map();
     let verifiedDirectory = {};
-    let tagDefinitions = parseTagDefinitions(FALLBACK_TAG_LINES);
+    let tagDefinitions = [];
     let identitySignature = '';
     let lastCachedIdentitySource = '';
     let identityRevision = 0;
@@ -102,11 +88,18 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             if (fields.length < 5 || !/^[a-z][a-z0-9_]*$/i.test(fields[0])) continue;
             if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(fields[3]) ||
                 !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(fields[4])) continue;
+            const action = fields[5] || '';
+            const value = fields[6] || '';
+            const directUrl = /^https?:\/\//i.test(action);
+            const valueUrl = !action && /^https?:\/\//i.test(value);
             tags.push({ key: fields[0].toLowerCase(), label: fields[2],
                 textColor: fields[3], backgroundColor: fields[4],
-                nameGroup: fields[1] === '{name}' && fields[2] === '{name}' });
+                nameGroup: fields[1] === '{name}' && fields[2] === '{name}',
+                clickAction: directUrl || valueUrl ? 'link' : action.toLowerCase(),
+                clickValue: directUrl ? action : value });
         }
-        return tags.length ? tags : parseTagDefinitions(FALLBACK_TAG_LINES);
+        if (!tags.length) throw new Error('No valid tag definitions from admin.');
+        return tags;
     }
     function parseDirectoryJson(source) {
         try { return JSON.parse(source); }
@@ -153,9 +146,18 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             if (!/^\d+$/.test(playerId) || !player || typeof player !== 'object') continue;
             const discordId = String(player.discord_id ?? player.discordId ?? '').trim();
             if (!/^\d+$/.test(discordId)) continue;
+            const links = Object.create(null);
+            if (player.links && typeof player.links === 'object' && !Array.isArray(player.links)) {
+                for (const [key, value] of Object.entries(player.links)) {
+                    if (/^[a-z][a-z0-9_]*$/i.test(key) && typeof value === 'string') {
+                        const link = validExternalUrl(value);
+                        if (link) links[key.toLowerCase()] = link;
+                    }
+                }
+            }
             const entry = { playerId, name: String(player.name || ''),
                 nickname: String(player.nickname || ''),
-                tags: Array.isArray(player.tags) ? player.tags.map(tag => String(tag).toLowerCase()) : [] };
+                tags: Array.isArray(player.tags) ? player.tags.map(tag => String(tag).toLowerCase()) : [], links };
             nextDirectory.set(discordId, entry);
         }
         const nextSignature = JSON.stringify([Array.from(nextDirectory.entries()), verified, tags]);
@@ -184,13 +186,16 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         const verifiedURL = getRawLink(hub.GITHUB_VERIFIED_URL);
         const rawVerified = verifiedURL
             ? String(GM_getValue('ss-live-reports-verified-names:' + encodeURIComponent(verifiedURL), '') || '') : '';
-        const rawTags = String(GM_getValue(TAGS_CACHE_KEY, '') || FALLBACK_TAG_LINES);
+        const rawTags = String(GM_getValue(TAGS_CACHE_KEY, '') || '');
+        if (!rawTags) return false;
         const sourceSignature = JSON.stringify([usersURL, rawPlayers, rawVerified, rawTags]);
         if (sourceSignature === lastCachedIdentitySource) return true;
         let verified = {};
         try { if (rawVerified) verified = parseDirectoryJson(rawVerified).players || {}; }
         catch (_) {}
-        const tags = parseTagDefinitions(rawTags);
+        let tags;
+        try { tags = parseTagDefinitions(rawTags); }
+        catch (_) { return false; }
         lastCachedIdentitySource = sourceSignature;
         applyIdentityData(players, verified, tags);
         return true;
@@ -200,7 +205,8 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         if (Date.now() < nextDirectoryFetch) return;
         const hub = getHub();
         const url = getRawLink(hub.GITHUB_USER_TAGS_URL);
-        if (!url || typeof fetch !== 'function') return;
+        const tagURL = getRawLink(hub.GITHUB_REPORT_TAGS_URL);
+        if (!url || !tagURL || typeof fetch !== 'function') return;
         identityLoading = true;
         nextDirectoryFetch = Date.now() + 30000;
         identityFetchPromise = (async () => {
@@ -218,13 +224,13 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 } catch (_) {}
             }
             let tags = tagDefinitions;
-            const tagURL = getRawLink(hub.GITHUB_REPORT_TAGS_URL);
             if (tagURL) {
                 try {
                     const result = await fetch(tagURL + '?refresh=' + Date.now(), { cache: 'no-store' });
                     if (result.ok) tags = parseTagDefinitions(await result.text());
                 } catch (_) {}
             }
+            if (!tags.length) return;
             applyIdentityData(players, verified, tags);
         } catch (_) {
         } finally { identityLoading = false; identityFetchPromise = null; }
@@ -242,24 +248,116 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         const name = String(verified.nickname || verified.name || player.nickname || player.name || '').trim();
         if (!name) return null;
         const roles = new Set(player.tags);
-        const role = tagDefinitions.find(tag => !tag.nameGroup &&
+        const role = tagDefinitions.find(tag => !tag.nameGroup && tag.key !== 'time' &&
             (roles.has(tag.key) || (ROLE_ALIASES[tag.key] || []).some(alias => roles.has(alias)))) || null;
         const nameTag = tagDefinitions.find(tag => tag.nameGroup && tag.key !== 'name' && roles.has(tag.key)) ||
             tagDefinitions.find(tag => tag.nameGroup && tag.key === 'name') ||
             { textColor: '#FFFFFF', backgroundColor: '#0C576F' };
-        return { name, role, nameTag: {
-            textColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.text_color || verified.textColor || '')
-                ? (verified.text_color || verified.textColor) : nameTag.textColor,
-            backgroundColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.background_color || verified.backgroundColor || '')
-                ? (verified.background_color || verified.backgroundColor) : nameTag.backgroundColor
-        } };
+        return { discordId: String(discordId), playerId: player.playerId, name, role,
+            links: player.links, verifiedLinkSpecified: Object.prototype.hasOwnProperty.call(verified, 'link'),
+            verifiedLink: verified.link,
+            nameTag: { ...nameTag,
+                textColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.text_color || verified.textColor || '')
+                    ? (verified.text_color || verified.textColor) : nameTag.textColor,
+                backgroundColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(verified.background_color || verified.backgroundColor || '')
+                    ? (verified.background_color || verified.backgroundColor) : nameTag.backgroundColor
+            } };
     }
-    function makeBadge(tag, label) {
+    function validExternalUrl(value) {
+        try {
+            const url = new URL(String(value || '').trim());
+            return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+        } catch (_) { return ''; }
+    }
+    function getBadgeLink(tag, identity) {
+        const links = identity.links || {};
+        const exact = links[tag.key] || '';
+        const alias = tag.key === 'league' ? (links.leaguerep || '') :
+            tag.key === 'leaguerep' ? (links.league || '') : '';
+        if (tag.nameGroup) {
+            if (identity.verifiedLinkSpecified) return validExternalUrl(identity.verifiedLink);
+            return validExternalUrl(exact || links.name);
+        }
+        return validExternalUrl(exact || alias);
+    }
+    function replaceBadgeTokens(value, identity) {
+        const tokens = {
+            '{name}': identity.name, '{nickname}': identity.name,
+            '{username}': identity.name, '{discord_id}': identity.discordId,
+            '{player_id}': identity.playerId
+        };
+        return String(value).replace(/\{(?:name|nickname|username|discord_id|player_id)\}/g,
+            token => tokens[token] || '');
+    }
+    function getBadgeAction(tag, identity) {
+        const linked = getBadgeLink(tag, identity);
+        if (linked) return { link: linked };
+        if (!(tag.nameGroup && identity.verifiedLinkSpecified && !identity.verifiedLink) &&
+            tag.clickAction === 'link') {
+            const link = validExternalUrl(tag.clickValue);
+            if (link) return { link };
+        }
+        if (tag.clickAction === 'copy' && tag.clickValue)
+            return { copy: replaceBadgeTokens(tag.clickValue, identity) };
+        return { copy: identity.discordId };
+    }
+    async function copyBadgeText(value) {
+        try {
+            if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+            await navigator.clipboard.writeText(value);
+        } catch (_) {
+            const input = document.createElement('textarea');
+            input.value = value;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            input.remove();
+        }
+    }
+    const badgePulseTimers = new WeakMap();
+    function makeBadge(tag, label, identity = null) {
         const badge = document.createElement('span');
         badge.className = 'ss-report-tag ss-modchat-tag';
         badge.textContent = label;
         badge.style.setProperty('color', tag.textColor, 'important');
         badge.style.setProperty('background', tag.backgroundColor, 'important');
+        if (identity) {
+            const action = getBadgeAction(tag, identity);
+            badge.setAttribute('role', 'button');
+            badge.tabIndex = 0;
+            badge.title = action.link ? 'Open link' : 'Copy Discord ID';
+            const activate = event => {
+                event.preventDefault();
+                event.stopPropagation();
+                clearTimeout(badgePulseTimers.get(badge));
+                badge.style.setProperty('opacity', '0.5', 'important');
+                badgePulseTimers.set(badge, setTimeout(() => badge.style.removeProperty('opacity'), 200));
+                if (action.link) window.open(action.link, '_blank', 'noopener,noreferrer');
+                else if (action.copy) copyBadgeText(action.copy);
+            };
+            badge.addEventListener('click', activate);
+            badge.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') activate(event);
+            });
+        }
+        return badge;
+    }
+    function messageTimeTag(message) {
+        const timeTag = tagDefinitions.find(tag => tag.key === 'time' && !tag.nameGroup);
+        if (!timeTag) return null;
+        let timestamp = Date.parse(String(message.timestamp || ''));
+        if (!Number.isFinite(timestamp)) {
+            try { timestamp = Number((BigInt(message.id) >> 22n) + 1420070400000n); }
+            catch (_) { return null; }
+        }
+        if (!Number.isFinite(timestamp)) return null;
+        const label = '[' + new Date(timestamp).toLocaleTimeString('en-US', {
+            hour: 'numeric', minute: '2-digit', hour12: true
+        }) + ']';
+        const badge = makeBadge(timeTag, label);
+        badge.classList.add('ss-modchat-time');
         return badge;
     }
     function getBody(message) {
@@ -402,17 +500,22 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             row.className = 'ss-modchat-message';
             row.dataset.messageId = message.id;
             const identity = getIdentity(message.author?.id);
+            const header = document.createElement('div');
+            header.className = 'ss-modchat-message-header';
             if (identity) {
                 const badges = document.createElement('span');
                 badges.className = 'ss-report-log-tags ss-modchat-author-tags';
-                if (identity.role) badges.appendChild(makeBadge(identity.role, identity.role.label));
-                badges.appendChild(makeBadge(identity.nameTag, identity.name));
-                row.appendChild(badges);
+                if (identity.role) badges.appendChild(makeBadge(identity.role, identity.role.label, identity));
+                badges.appendChild(makeBadge(identity.nameTag, identity.name, identity));
+                header.appendChild(badges);
             } else {
                 const fallback = document.createElement('strong');
-                fallback.textContent = getName(message.author) + ': ';
-                row.appendChild(fallback);
+                fallback.textContent = getName(message.author) + ':';
+                header.appendChild(fallback);
             }
+            const time = messageTimeTag(message);
+            if (time) header.appendChild(time);
+            row.appendChild(header);
             const body = document.createElement('span');
             body.className = 'ss-modchat-body';
             body.textContent = getDisplayedBody(message);
@@ -561,11 +664,14 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 background:#06baf7; font:calc(10 * var(--ss-report-unit))/1.3 Arial,sans-serif;
                 color:#0c576f; overflow-wrap:anywhere; white-space:pre-wrap;
             }
-            #custom-reports-panel .ss-modchat-message {display:flex; flex-wrap:wrap; gap:3px; align-items:center;}
+            #custom-reports-panel .ss-modchat-message {display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%;}
+            #custom-reports-panel .ss-modchat-message-header {display:flex; flex-wrap:wrap; align-items:center; gap:3px; width:100%;}
             #custom-reports-panel .ss-modchat-message strong {font-weight:800;color:#0c576f;}
-            #custom-reports-panel .ss-modchat-message .ss-modchat-body {color:#123d54; white-space:pre-wrap;}
+            #custom-reports-panel .ss-modchat-message .ss-modchat-body {display:block; width:100%; color:#123d54; white-space:pre-wrap;}
             #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:2px;}
             #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important; font-size:calc(8 * var(--ss-report-unit)) !important; padding:calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;}
+            #custom-reports-panel .ss-modchat-tag[role="button"] {cursor:pointer;}
+            #custom-reports-panel .ss-modchat-time {cursor:default;}
             #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:10px 0;}
             #custom-reports-panel #ss-modchat-status {
                 display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
