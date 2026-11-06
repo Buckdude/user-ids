@@ -77,14 +77,15 @@
       "nickname": "King Hayden",
       "discord_id": "",
       "tags": ["eggforcer", "cc", "member"],
-      "links": {"cc": "https://example.com"}
+      "links": {"cc": "https://www.twitch.tv/king_hayden_"}
     },
     "2919595": {
       "name": "itz_astra.",
       "nickname": "Astra",
       "discord_id": "",
       "tags": ["ccmod", "eggforcer", "leaguerep", "member"],
-      "links": {"leaguerep": "https://example.com"}
+      "links": {"name": "https://discord.gg/wEqMttqR"},
+      "links": {"leaguerep": "https://discord.gg/wEqMttqR"}
     },
     "1870222": {
       "name": "sharkbucks",
@@ -182,7 +183,7 @@
       "nickname": "Thee Owl",
       "discord_id": "",
       "tags": ["eggforcer", "excc", "member"],
-      "links": {"excc": "https://example.com"}
+      "links": {"excc": "https://www.twitch.tv/thee_owl"}
     },
     "4534": {
       "name": "_wabbits",
