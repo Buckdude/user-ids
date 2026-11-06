@@ -108,21 +108,21 @@
     "1943513": {
       "name": "kjdcitsme",
       "nickname": "KJDCitsme",
-      "discord_id": "",
+      "discord_id": "290521614091812864",
       "tags": ["eggforcer", "excc", "member"],
       "links": {"excc": "https://www.twitch.tv/kjdcitsme"}
     },
     "56280272": {
       "name": "itz_tog",
-      "nickname": "",
-      "discord_id": "",
+      "nickname": "Itz TOG",
+      "discord_id": "1125261991720783963",
       "tags": ["eggforcer", "member"]
     },
     "69434046": {
       "name": "webx",
       "nickname": "",
-      "discord_id": "",
-      "tags": ["eggforcer", "member"]
+      "discord_id": "804029208677711973",
+      "tags": ["exeggforcer", "member"]
     },
     "70575525": {
       "name": "theavenger3382",
@@ -134,7 +134,7 @@
       "name": "menoxd",
       "nickname": "MenoXD",
       "discord_id": "235389150751096832",
-      "tags": ["eggforcer", "excc", "member"],
+      "tags": ["exeggforcer", "excc"],
       "links": {"excc": "https://www.twitch.tv/menoXD"}
     },
     "20656368": {
@@ -179,7 +179,7 @@
     "20795141": {
       "name": "infinitesmasher",
       "nickname": "Infinite",
-      "discord_id": "",
+      "discord_id": "592984873262645248",
       "tags": ["mod", "eggforcer", "member"]
     },
     "1039224": {
@@ -192,13 +192,13 @@
     "4534": {
       "name": "_wabbits",
       "nickname": "Wabbits",
-      "discord_id": "",
+      "discord_id": "350344557956825088",
       "tags": ["archwizard", "eggforcer", "member"]
     },
     "1546299": {
       "name": "zamsgod",
       "nickname": "",
-      "discord_id": "",
+      "discord_id": "496148720245669908",
       "tags": ["leaguemod", "eggforcer", "cc", "member"],
       "links": {"cc": "https://www.twitch.tv/zamsgodz"}
     },
@@ -217,7 +217,7 @@
     "1599741": {
       "name": "blueberry256",
       "nickname": "Blueberry",
-      "discord_id": "",
+      "discord_id": "1101281997613191279",
       "tags": ["eggforcer", "member"]
     },
     "22215799": {
@@ -233,10 +233,11 @@
       "tags": ["member"]
     },
     "58268605": {
-      "name": "godricgryffindor",
+      "name": "godric.17",
       "nickname": "Godric",
-      "discord_id": "",
+      "discord_id": "1006362035791085608",
       "tags": ["member", "excc"]
+      "links": {"excc": "https://www.youtube.com/channel/UCd2dw87zATrvwn2_eJ2topw"}
     },
     "58144754": {
       "name": "wrenched59",
