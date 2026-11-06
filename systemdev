@@ -1376,8 +1376,8 @@ globalThis.__SS_LIVE_REPORTS_START__ = function startShellReports(discordRequest
                     reactionCache[xReactionKey(newest.id)] = true;
                     pinned.push(newest);
                 }
-                pinned.sort((a, b) => xIsNewer(a, b) ? -1 : xIsNewer(b, a) ? 1 : 0);
-                return [...pinned, ...reports.filter(report => !xAutoState[report.pid]?.enabled && isActionTaken(report))];
+                return [...pinned, ...reports.filter(report => !xAutoState[report.pid]?.enabled && isActionTaken(report))]
+                    .sort((a, b) => xIsNewer(a, b) ? -1 : xIsNewer(b, a) ? 1 : 0);
             }
 
             const resolvedByPlayer = new Map();
