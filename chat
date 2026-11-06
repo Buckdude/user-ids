@@ -290,16 +290,18 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             token => tokens[token] || '');
     }
     function getBadgeAction(tag, identity) {
+        if (tag.nameGroup) return { copy: identity.discordId };
         const linked = getBadgeLink(tag, identity);
         if (linked) return { link: linked };
-        if (!(tag.nameGroup && identity.verifiedLinkSpecified && !identity.verifiedLink) &&
-            tag.clickAction === 'link') {
+        if (tag.clickAction === 'link') {
             const link = validExternalUrl(tag.clickValue);
             if (link) return { link };
         }
-        if (tag.clickAction === 'copy' && tag.clickValue)
-            return { copy: replaceBadgeTokens(tag.clickValue, identity) };
-        return { copy: identity.discordId };
+        if (tag.clickAction === 'copy' && tag.clickValue) {
+            const value = replaceBadgeTokens(tag.clickValue, identity);
+            if (value && value !== identity.discordId) return { copy: value };
+        }
+        return null;
     }
     async function copyBadgeText(value) {
         try {
@@ -323,11 +325,12 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
         badge.textContent = label;
         badge.style.setProperty('color', tag.textColor, 'important');
         badge.style.setProperty('background', tag.backgroundColor, 'important');
-        if (identity) {
-            const action = getBadgeAction(tag, identity);
+        const action = identity ? getBadgeAction(tag, identity) : null;
+        if (action) {
             badge.setAttribute('role', 'button');
             badge.tabIndex = 0;
-            badge.title = action.link ? 'Open link' : 'Copy Discord ID';
+            badge.title = action.link ? 'Open link' :
+                (tag.nameGroup ? 'Copy Discord ID' : 'Copy text');
             const activate = event => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -353,12 +356,10 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             catch (_) { return null; }
         }
         if (!Number.isFinite(timestamp)) return null;
-        const label = '[' + new Date(timestamp).toLocaleTimeString('en-US', {
+        const label = new Date(timestamp).toLocaleTimeString('en-US', {
             hour: 'numeric', minute: '2-digit', hour12: true
-        }) + ']';
-        const badge = makeBadge(timeTag, label);
-        badge.classList.add('ss-modchat-time');
-        return badge;
+        });
+        return makeBadge(timeTag, label);
     }
     function getBody(message) {
         const content = String(message.content || '').trim();
@@ -507,14 +508,16 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
                 badges.className = 'ss-report-log-tags ss-modchat-author-tags';
                 if (identity.role) badges.appendChild(makeBadge(identity.role, identity.role.label, identity));
                 badges.appendChild(makeBadge(identity.nameTag, identity.name, identity));
+                const time = messageTimeTag(message);
+                if (time) badges.appendChild(time);
                 header.appendChild(badges);
             } else {
                 const fallback = document.createElement('strong');
                 fallback.textContent = getName(message.author) + ':';
                 header.appendChild(fallback);
+                const time = messageTimeTag(message);
+                if (time) header.appendChild(time);
             }
-            const time = messageTimeTag(message);
-            if (time) header.appendChild(time);
             row.appendChild(header);
             const body = document.createElement('span');
             body.className = 'ss-modchat-body';
@@ -671,7 +674,6 @@ globalThis.__SS_MOD_CHAT_START__ = function startModChat(options) {
             #custom-reports-panel .ss-modchat-author-tags {display:inline-flex; align-items:center; flex-wrap:wrap; gap:2px;}
             #custom-reports-panel .ss-modchat-tag {box-shadow:none !important; text-shadow:none !important; font-size:calc(8 * var(--ss-report-unit)) !important; padding:calc(1 * var(--ss-report-unit)) calc(4 * var(--ss-report-unit)) !important;}
             #custom-reports-panel .ss-modchat-tag[role="button"] {cursor:pointer;}
-            #custom-reports-panel .ss-modchat-time {cursor:default;}
             #custom-reports-panel .ss-modchat-empty {font-weight:700;text-align:center;padding:10px 0;}
             #custom-reports-panel #ss-modchat-status {
                 display:none; padding:4px 8px; color:#9b1818; font:700 calc(10 * var(--ss-report-unit)) Arial,sans-serif;
