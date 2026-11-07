@@ -300,9 +300,7 @@
       "name": "kaaam_is_not_tuff",
       "nickname": "Shell kaaam",
       "discord_id": "1239280331140632588",
-      "tags": [
-        "verified"
-      ]
+      "tags": ["verified", "member"]
     },
     "131102531": {
       "name": "bzzt_24593",
