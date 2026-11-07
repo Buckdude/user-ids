@@ -316,9 +316,7 @@
       "name": "washingmachine0015",
       "nickname": "washing machine",
       "discord_id": "1452773435339051269",
-      "tags": [
-        "verified"
-      ]
+      "tags": ["verified", "member"]
     },
     "132980894": {
       "name": "stein_frfr",
