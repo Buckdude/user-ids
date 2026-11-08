@@ -503,6 +503,12 @@
       "nickname": "Peak",
       "discord_id": "1394850348543246459",
       "tags": ["verified"]
+    },
+    "82927029": {
+      "name": "professional_apple",
+      "nickname": "Apple",
+      "discord_id": "1178737960133337108",
+      "tags": ["verified", "member"]
     }
   }
 }
