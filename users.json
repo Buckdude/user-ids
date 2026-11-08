@@ -70,11 +70,17 @@
       "discord_id": "",
       "tags": ["eggforcer", "member"]
     },
+    "65513410": {
+      "name": "deathlylove",
+      "nickname": "DeathlyLove",
+      "discord_id": "986737122134339644",
+      "tags": ["mod", "verified", "member", "eggforcer"]
+    },
     "30124780": {
       "name": "king_hayden",
       "nickname": "King Hayden",
       "discord_id": "",
-      "tags": ["eggforcer", "cc", "member"],
+      "tags": ["mod", "eggforcer", "cc", "member"],
       "links": {"cc": "https://www.twitch.tv/king_hayden_"}
     },
     "2919595": {
