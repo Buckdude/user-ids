@@ -493,9 +493,15 @@
       "tags": ["verified"]
     },
     "124733018": {
-      "name": "shell_sulfer",
+      "name": "shell_sulfur",
       "nickname": "Sulfur",
       "discord_id": "1546990021473607782",
+      "tags": ["verified"]
+    },
+    "23470661": {
+      "name": "peakz.aim",
+      "nickname": "Peak",
+      "discord_id": "1394850348543246459",
       "tags": ["verified"]
     }
   }
