@@ -4,37 +4,37 @@
       "name": "raider.aim",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "1629047": {
       "name": "swift5463",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "58144754": {
       "name": "wrenched59",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "51295374": {
       "name": "lazerlockx",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "27478598": {
       "name": "iliketutless",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "111862008": {
       "name": "puffyflakes",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "81041465": {
       "name": "atragonzero",
@@ -46,103 +46,103 @@
       "name": "unknown_icicle",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "56688025": {
       "name": "fuzzyisalunatic",
       "nickname": "fuzzyisalunatic",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "38189385": {
       "name": "daibo._",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "15728507": {
       "name": "kurokabo",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "97414799": {
       "name": "leggy_9",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "24763392": {
       "name": "noz453",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "91557146": {
       "name": "th3_los3r",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "76684277": {
       "name": "yanyan425",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "24990570": {
       "name": "rwxu",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "72574693": {
       "name": "gattyan3601",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "8484150": {
       "name": "leola.sp",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "36965317": {
       "name": "insomniak03",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "75457885": {
       "name": "sharky6314",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "96542131": {
       "name": "meep_in_da_house_36987",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "1450382": {
       "name": "bracket_shell",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "94470724": {
       "name": "thefancychickens",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "64507230": {
       "name": "sweetpoison4086",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "75338985": {
       "name": "apark.7",
@@ -154,7 +154,7 @@
       "name": "haz005",
       "nickname": "",
       "discord_id": "",
-      "tags": ["verified"]
+      "tags": ["verified", "member"]
     },
     "17456373": {
       "name": "deltaxld.17",
@@ -395,6 +395,18 @@
       "nickname": "teddy sniper",
       "discord_id": "",
       "tags": ["verified"]
+    },
+    "33629946": {
+      "name": "shrinkk",
+      "nickname": "",
+      "discord_id": "",
+      "tags": ["verified", "member"]
+    },
+    "128524592": {
+      "name": "doubldamage",
+      "nickname": "DoublDamage",
+      "discord_id": "1178491253130797209",
+      "tags": ["verified", "member"]
     }
   }
 }
